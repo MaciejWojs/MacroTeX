@@ -40,5 +40,8 @@
   },
   "engines": {
     "vscode": "^1.86.0"
-  }
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ]
 }

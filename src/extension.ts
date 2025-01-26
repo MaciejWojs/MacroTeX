@@ -1,6 +1,8 @@
 import * as vscode from "vscode";
 
 export const activate = (context: vscode.ExtensionContext) => {
+
+  vscode.window.showInformationMessage("Test");
   const disposable = vscode.commands.registerCommand(
     "bun-vscode-extension.helloworld",
     () => {
@@ -11,4 +13,4 @@ export const activate = (context: vscode.ExtensionContext) => {
   context.subscriptions.push(disposable);
 };
 
-export const deactivate = () => {};
+export const deactivate = () => { };
