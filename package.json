@@ -22,8 +22,8 @@
     "clean": "rm -r ./dist"
   },
   "//": "START EXTENSION ATTRIBUTES",
-  "name": "my-extension",
-  "version": "0.0.1",
+  "name": "MarcoTex",
+  "version": "0.0.3",
   "description": "Extension description",
   "displayName": "Extension display name",
   "repository": {
@@ -31,12 +31,45 @@
     "url": "https://github.com/YOURNAME"
   },
   "contributes": {
-    "commands": [
-      {
-        "command": "bun-vscode-extension.helloworld",
-        "title": "Hello World"
+    "configuration": {
+      "type": "object",
+      "title": "LaTeX Macro Settings",
+      "properties": {
+        "latexMacros.macrosList": {
+          "type": "array",
+          "default": [
+            {
+              "signature": "\\fg{PATH}{}{}",
+              "extensions": [
+                "png",
+                "jpg"
+              ]
+            },
+            {
+              "signature": "\\fg[]{PATH}{}{}",
+              "extensions": [
+                "png",
+                "jpg"
+              ]
+            }
+          ],
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "The LaTeX macro signature"
+              },
+              "description": {
+                "type": "string",
+                "description": "A brief description of the macro"
+              }
+            }
+          },
+          "description": "List of LaTeX macro signatures"
+        }
       }
-    ]
+    }
   },
   "engines": {
     "vscode": "^1.86.0"
