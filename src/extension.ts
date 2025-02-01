@@ -2,53 +2,55 @@ import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
 
-function findMainLaTeXFile() {
-  if (!vscode.workspace.workspaceFolders) {
-    return null;
-  }
-  const workspaceFolder = vscode.workspace.workspaceFolders[0].uri.fsPath;
-  const files = fs.readdirSync(workspaceFolder, { recursive: true });
-  for (const file of files) {
-    const fileStr = file.toString();
-    const filePath = path.join(workspaceFolder, fileStr);
+async function findMainLaTeXFile(): Promise<string | null> {
+  try {
+    const files = await vscode.workspace.findFiles('**/*.tex');
 
-    // Sprawdzenie, czy to plik .tex
-    if (fileStr.endsWith('.tex')) {
-      const content = fs.readFileSync(filePath, 'utf-8');
+    for (const file of files) {
+      const content = await vscode.workspace.fs.readFile(file);
+      const text = Buffer.from(content).toString('utf-8');
 
-      // Jeśli plik zawiera komendę \documentclass, może być głównym plikiem
-      if (content.includes('\\documentclass')) {
-        return filePath;
+      if (text.includes('\\documentclass')) {
+        return file.fsPath;
       }
     }
-  }
 
-  return null; // Jeśli nie znaleziono pliku głównego
+    return null;
+  } catch (error) {
+    console.error('Error finding main LaTeX file:', error);
+    return null;
+  }
 }
 
-let mainLaTeXFile = findMainLaTeXFile();
+let mainLaTeXFile: string | null = null;
 
-vscode.workspace.onDidRenameFiles((e) => {
-  for (const file of e.files) {
-    if (file.oldUri.fsPath === mainLaTeXFile) {
-      const oldMainLaTeXFile = mainLaTeXFile;
-      mainLaTeXFile = file.newUri.fsPath;
-      console.log(`Main LaTeX file changed from ${oldMainLaTeXFile} to ${mainLaTeXFile}`);
-    }
-  }
-});
-
-vscode.workspace.onDidDeleteFiles((e) => {
-  for (const file of e.files) {
-    if (file.fsPath === mainLaTeXFile) {
-      mainLaTeXFile = findMainLaTeXFile();
-      console.log(`Main LaTeX file deleted, new main LaTeX file: ${mainLaTeXFile}`);
-    }
-  }
-});
-
-export const activate = (context: vscode.ExtensionContext) => {
+export const activate = async (context: vscode.ExtensionContext) => {
   console.log("Extension MacroTex is now active!");
+  mainLaTeXFile = await findMainLaTeXFile();
+
+  context.subscriptions.push(
+    vscode.workspace.onDidRenameFiles((e) => {
+      for (const file of e.files) {
+        if (file.oldUri.fsPath === mainLaTeXFile) {
+          const oldMainLaTeXFile = mainLaTeXFile;
+          mainLaTeXFile = file.newUri.fsPath;
+          console.log(`Main LaTeX file changed from ${oldMainLaTeXFile} to ${mainLaTeXFile}`);
+        }
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.workspace.onDidDeleteFiles(async (e) => {
+      for (const file of e.files) {
+        if (file.fsPath === mainLaTeXFile) {
+          mainLaTeXFile = await findMainLaTeXFile();
+          console.log(`Main LaTeX file deleted, new main LaTeX file: ${mainLaTeXFile}`);
+        }
+      }
+    })
+  )
+
   // Get the configuration for your extension
   const config = vscode.workspace.getConfiguration('latexMacros');
 
@@ -165,25 +167,50 @@ export const activate = (context: vscode.ExtensionContext) => {
     const fileExtensions = macrosList?.find(macro => macro.signature === selectedOption)?.extensions;
     if (!fileExtensions) return;
     const uriArray = Array.isArray(uris) ? uris : [uris];
-    // First check if any URI is a directory
-    const hasDirectories = uriArray.some(uri => fs.statSync(uri.fsPath).isDirectory());
 
-    const urisArray = hasDirectories
-      ? await Promise.all(
-        uriArray.map(async uri =>
-          fs.statSync(uri.fsPath).isDirectory()
-            ? Promise.all(fileExtensions.map(ext =>
-              vscode.workspace.findFiles(new vscode.RelativePattern(uri.fsPath, `**/*.${ext}`))
-            )).then(results => results.flat())
-            : [uri]
-        )
-      ).then(results => results.flat())
-      : uriArray;
-    console.log('urisArray', urisArray);
+    // Process URIs: find files in directories or return the URI itself
+    const urisArray = await Promise.all(uriArray.map(async (uri) => {
+      if (fs.statSync(uri.fsPath).isDirectory()) {
+        const results = await Promise.all(fileExtensions.map(ext =>
+          vscode.workspace.findFiles(new vscode.RelativePattern(uri.fsPath, `**/*.${ext}`))
+        ));
+        return results.flat();
+      }
+      return [uri];
+    }));
 
-    const uriArrayCleaned = urisArray.filter(uri =>
-      fileExtensions.includes(uri.fsPath.split('.').pop()?.toLowerCase() || '')
+    // Flatten results and get unique folder paths
+    const allUris = urisArray.flat();
+    const foldersPaths = [...new Set(allUris.map(uri => path.dirname(uri.fsPath)))];
+
+    // Sort images in each folder
+    const sortedImages = await Promise.all(foldersPaths.map(async (folder) => {
+      const folderUris = allUris.filter(uri => path.dirname(uri.fsPath) === folder);
+      const allNumeric = folderUris.every(uri => /^\d+$/.test(path.basename(uri.fsPath, path.extname(uri.fsPath))));
+
+      if (allNumeric && folderUris.length > 1) {
+        folderUris.sort((a, b) => {
+          const aNum = parseInt(path.basename(a.fsPath, path.extname(a.fsPath)));
+          const bNum = parseInt(path.basename(b.fsPath, path.extname(b.fsPath)));
+          return aNum - bNum;
+        });
+      }
+
+      return folderUris;
+    }));
+
+    // Flatten the results after sorting
+    const flatSortedImages = sortedImages.flat();
+
+    console.log('sortedImages', flatSortedImages);
+
+    // Filter by valid extensions
+    const uriArrayCleaned = flatSortedImages.filter(uri =>
+      fileExtensions.includes(path.extname(uri.fsPath).slice(1).toLowerCase())
     );
+
+    console.log('sortedImages', sortedImages);
+
     console.log(uriArrayCleaned);
     console.log("length", uriArrayCleaned.length);
     if (uriArrayCleaned.length === 0) {

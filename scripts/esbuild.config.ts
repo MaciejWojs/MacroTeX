@@ -4,7 +4,7 @@ const config: BuildOptions = {
   entryPoints: ["./src/extension.ts"],
   bundle: true,
   platform: "node",
-  target: "node12",
+  target: "node20",
   outdir: "./dist",
   outbase: "./src",
   outExtension: {
