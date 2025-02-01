@@ -22,6 +22,16 @@ async function findMainLaTeXFile(): Promise<string | null> {
   }
 }
 
+// Helper function to process macro signatures
+function processMacroSignature(signature: string) {
+  let i = 1;
+  return signature
+    .replace(/\{/g, () => `{$\{${i++}:`)  // Handle required arguments
+    .replace(/\[/g, () => `[$\{${i++}:`)  // Handle optional arguments
+    .replaceAll('}', "}}")
+    .replace(']', '}]');
+}
+
 let mainLaTeXFile: string | null = null;
 
 export const activate = async (context: vscode.ExtensionContext) => {
@@ -79,69 +89,75 @@ export const activate = async (context: vscode.ExtensionContext) => {
         document: vscode.TextDocument,
         position: vscode.Position
       ) {
-        if (!mainLaTeXFile) return [];
-        if (!macrosList) return [];
-
+        if (!mainLaTeXFile || !macrosList) return [];  // Early return if data is missing
+        let skipSnippets = false
+        // Filter macros with "PATH" in the signature only once
+        const validMacros = macrosList.filter(macro => macro.signature.includes("PATH"));
+        if (validMacros.length === 0) return []; // Early return if no valid macros
+  
         const line = document.lineAt(position).text;
+        const linePrefix = normalizeMacroLine(line.substring(0, position.character));
         let completionItems: vscode.CompletionItem[] = [];
-        let linePrefix = normalizeMacroLine(line.substring(0, position.character))
-
-        if (macrosList) {
-          let skipSnippet = false;
-          const promises = macrosList.map(async (macro) => {
-            if (!macro.signature.includes("PATH")) return;
-            const macroFirstPart = normalizeMacroLine(macro.signature.split("PATH")[0]);
-            // const signature = normalizeMacroLine(macro.signature);
-            console.log(`${linePrefix} === ${macroFirstPart} -> ${linePrefix === macroFirstPart}`);
-            if (linePrefix === macroFirstPart) {
-              skipSnippet = true;
-              for (const fileExtension of macro.extensions.map(ext => ext.toLowerCase())) {
-                const uris = await vscode.workspace.findFiles(`**/*.${fileExtension}`);
-                for (let uri of uris) {
-                  const relativePathToMain = path.relative(path.dirname(mainLaTeXFile!!), uri.fsPath);
-                  let completionItem = new vscode.CompletionItem(relativePathToMain, vscode.CompletionItemKind.File);
-                  if (!["jpg", "jpeg", "png"].includes(fileExtension)) continue;
-                  const md = new vscode.MarkdownString(`![${macro.signature}](${uri.toString()}|width=500)`);
-                  md.supportHtml = true;
-                  md.isTrusted = true
-                  console.log(md)
-                  completionItem.documentation = md;
-                  completionItems.push(completionItem);
-                }
-              }
-            }
-          });
-          await Promise.all(promises);
-          for (const macro of macrosList) {
-            if (skipSnippet) break;
-            if (!macro.signature.includes("PATH")) continue;
-
-            const completionItem = new vscode.CompletionItem(macro.signature, vscode.CompletionItemKind.Method);
-            const parts = (linePrefix.endsWith('\\')) ? macro.signature.substring(1) : macro.signature;
-
-            let i = 1;
-            //! Methods chaing order matters
-            //* input: \macro[optional]{required} -> output: \macro[${1:optional}]{${2:required}}
-            //* edge case: \macro{} -> \macro{${1:}} [Works but ugly] 
-            const processedSignature = parts
-              .replace(/\{/g, () => `{$\{${i++}:`)
-              .replace(/\[/g, () => `[$\{${i++}:`)
-              .replaceAll('}', "}}")
-              .replace(']', '}]')
-
-            console.log(processedSignature);
-            completionItem.insertText = new vscode.SnippetString(processedSignature);
-            completionItem.documentation = new vscode.MarkdownString(
-              `macro: ${macro.signature}\n\nPATH is the path to the file eg. rys/rys1.png`
-            );
-            completionItems.push(completionItem);
+  
+        // Process each valid macro
+        const promises = validMacros.map(async (macro) => {
+          const macroFirstPart = normalizeMacroLine(macro.signature.split("PATH")[0]);
+          console.log(`${linePrefix} === ${macroFirstPart} -> ${linePrefix === macroFirstPart}`);
+  
+          // Only process if the prefix matches
+          if (linePrefix !== macroFirstPart) return;
+          else skipSnippets = true
+  
+          // Find files for each extension in parallel
+          const filePromises = macro.extensions
+            .map(ext => ext.toLowerCase())
+            .filter(ext => ["jpg", "jpeg", "png"].includes(ext)) // Filter for image extensions
+            .map(async (fileExtension) => {
+              const uris = await vscode.workspace.findFiles(`**/*.${fileExtension}`);
+              return uris.sort().map(uri => {
+                const relativePathToMain = path.relative(path.dirname(mainLaTeXFile!!), uri.fsPath);
+                const completionItem = new vscode.CompletionItem(relativePathToMain, vscode.CompletionItemKind.File);
+  
+                const md = new vscode.MarkdownString(`![${macro.signature}](${uri.toString()}|width=500)`);
+                md.supportHtml = true;
+                md.isTrusted = true;
+                completionItem.documentation = md;
+  
+                return completionItem;
+              });
+            });
+  
+          // Wait for all filePromises to finish and flatten the result
+          const completionItemsForMacro = (await Promise.all(filePromises)).flat();
+          if (completionItemsForMacro.length > 0) {
+            completionItems.push(...completionItemsForMacro);
           }
-          return completionItems;
+        });
+  
+        // Wait for all promises to finish before proceeding
+        await Promise.all(promises);
+  
+        if (skipSnippets) return completionItems
+        
+        // Add macro snippets to the completion items
+        for (const macro of validMacros) {
+          const completionItem = new vscode.CompletionItem(macro.signature, vscode.CompletionItemKind.Method);
+          const parts = linePrefix.endsWith('\\') ? macro.signature.substring(1) : macro.signature;
+          const processedSignature = processMacroSignature(parts); // Helper function to process the signature
+  
+          console.log(processedSignature);
+          completionItem.insertText = new vscode.SnippetString(processedSignature);
+          completionItem.documentation = new vscode.MarkdownString(
+            `macro: ${macro.signature}\n\nPATH is the path to the file eg. rys/rys1.png`
+          );
+  
+          completionItems.push(completionItem);
         }
-
+  
         return completionItems;
       },
     });
+  
   context.subscriptions.push(disposable);
 
   vscode.commands.registerCommand("marcotex.insetToActiveDocument", async (contextSelection: vscode.Uri, uris: vscode.Uri[]) => {
@@ -240,6 +256,7 @@ export const activate = async (context: vscode.ExtensionContext) => {
         if (insertClearPage && counter % 2 === 0) finalMacros += '\n\\clearpage\n';
       }
       if (finalMacros === "") return;
+      if (uriArrayCleaned.length===1) finalMacros=processMacroSignature(finalMacros)
       const snippet = new vscode.SnippetString(finalMacros);
       editor.insertSnippet(snippet, position);
       vscode.window.showInformationMessage(`Inserted ${counter} macros`);
