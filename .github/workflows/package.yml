@@ -6,7 +6,7 @@ on:
         - 'v*.*.*'
 
 jobs:
-  build_latex:
+  release_extension:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -24,7 +24,7 @@ jobs:
       - name: Package Extension
         run: bun run package
 
-      - name: Release the pdf
+      - name: Release Extension
         uses: ncipollo/release-action@v1
         with:
          artifacts: "*.vsix"
