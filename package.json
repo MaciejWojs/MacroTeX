@@ -23,7 +23,7 @@
   },
   "//": "START EXTENSION ATTRIBUTES",
   "name": "MarcoTex",
-  "version": "0.0.3",
+  "version": "0.0.9",
   "description": "Extension description",
   "displayName": "Extension display name",
   "repository": {
@@ -31,6 +31,21 @@
     "url": "https://github.com/YOURNAME"
   },
   "contributes": {
+    "commands": [
+      {
+        "command": "marcotex.insetToActiveDocument",
+        "title": "Insert in active document"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "marcotex.insetToActiveDocument",
+          "when": "resourceFilename",
+          "group": "navigation"
+        }
+      ]
+    },
     "configuration": {
       "type": "object",
       "title": "LaTeX Macro Settings",
@@ -46,7 +61,7 @@
               ]
             },
             {
-              "signature": "\\fg[]{PATH}{}{}",
+              "signature": "\\fg[width]{PATH}{Caption}{Identifier}",
               "extensions": [
                 "png",
                 "jpg"
@@ -67,6 +82,11 @@
             }
           },
           "description": "List of LaTeX macro signatures"
+        },
+        "latexMacros.insertClearpageInBulk": {
+          "type": "boolean",
+          "default": true,
+          "description": "Insert \\clearpage after every 2 macros"
         }
       }
     }
