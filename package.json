@@ -18,7 +18,7 @@
     "build": "bun run ./scripts/build-with-esbuild.ts",
     "watch": "bun run ./scripts/watch-with-esbuild.ts",
     "vsce-package": "bun run vsce package",
-    "package": "bun run build && bun run vsce-package && bun run clean",
+    "package": "bun run build && bun run vsce-package",
     "clean": "rm -r ./dist"
   },
   "//": "START EXTENSION ATTRIBUTES",
