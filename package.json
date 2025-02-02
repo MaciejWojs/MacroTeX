@@ -2,15 +2,15 @@
   "main": "./dist/extension.cjs",
   "module": "index.ts",
   "dependencies": {
-    "@types/vscode": "^1.86.0"
+    "@types/vscode": "^1.96.0"
   },
   "devDependencies": {
     "@types/bun": "latest",
     "@vscode/vsce": "^3.2.2",
-    "esbuild": "^0.20.0"
+    "esbuild": "^0.24.2"
   },
   "peerDependencies": {
-    "typescript": "^5.0.0"
+    "typescript": "^5.3.0"
   },
   "type": "module",
   "scripts": {
@@ -18,17 +18,36 @@
     "build": "bun run ./scripts/build-with-esbuild.ts",
     "watch": "bun run ./scripts/watch-with-esbuild.ts",
     "vsce-package": "bun run vsce package",
-    "package": "bun run build && bun run vsce-package",
+    "package": "bun run build && bun run vsce-package && bun run clean",
     "clean": "rm -r ./dist"
   },
   "//": "START EXTENSION ATTRIBUTES",
-  "name": "MarcoTex",
+  "name": "MacroTeX",
   "version": "0.1.1",
-  "description": "Extension description",
-  "displayName": "Extension display name",
+  "description": "A VSCode extension to insert LaTeX macros mainly for figures and images with automatic path completion",
+  "displayName": "MacroTeX",
+  "categories": [
+    "Programming Languages",
+    "Snippets",
+    "Other"
+  ],
+  "keywords": [
+    "LaTeX",
+    "macro",
+    "figures",
+    "images",
+    "snippets",
+    "templates"
+  ],
+  "publisher": "MaciejWojs",
+  "author": {
+    "name": "Maciej Wojs",
+    "url": "https://github.com/MaciejWojs"
+  },
+  "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/YOURNAME"
+    "url": "https://github.com/MaciejWojs/MacroTeX"
   },
   "contributes": {
     "commands": [
@@ -38,6 +57,12 @@
       }
     ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "marcotex.insetToActiveDocument",
+          "when": "false"
+        }
+      ],
       "explorer/context": [
         {
           "command": "marcotex.insetToActiveDocument",
@@ -92,7 +117,7 @@
     }
   },
   "engines": {
-    "vscode": "^1.86.0"
+    "vscode": "^1.90.0"
   },
   "activationEvents": [
     "onStartupFinished"

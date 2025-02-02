@@ -29,3 +29,6 @@ jobs:
         with:
          artifacts: "*.vsix"
          allowUpdates: true
+      
+      - name: Publish to marketplace
+        run: bun run vsce publish -p ${{ secrets.VSC_PAT }} --skip-duplicate
