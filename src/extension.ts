@@ -94,70 +94,77 @@ export const activate = async (context: vscode.ExtensionContext) => {
         // Filter macros with "PATH" in the signature only once
         const validMacros = macrosList.filter(macro => macro.signature.includes("PATH"));
         if (validMacros.length === 0) return []; // Early return if no valid macros
-  
+
         const line = document.lineAt(position).text;
         const linePrefix = normalizeMacroLine(line.substring(0, position.character));
         let completionItems: vscode.CompletionItem[] = [];
-  
+
         // Process each valid macro
         const promises = validMacros.map(async (macro) => {
           const macroFirstPart = normalizeMacroLine(macro.signature.split("PATH")[0]);
           console.log(`${linePrefix} === ${macroFirstPart} -> ${linePrefix === macroFirstPart}`);
-  
+
+
           // Only process if the prefix matches
-          if (linePrefix !== macroFirstPart) return;
+          if (!linePrefix.includes(macroFirstPart)) return;
           else skipSnippets = true
-  
+
+          let typedPath = linePrefix.replace(macroFirstPart, "")
+          if (typedPath.endsWith("/")) typedPath = typedPath.slice(0, -1)
+          console.log("typedPath: ", typedPath)
+
           // Find files for each extension in parallel
           const filePromises = macro.extensions
             .map(ext => ext.toLowerCase())
             .filter(ext => ["jpg", "jpeg", "png"].includes(ext)) // Filter for image extensions
             .map(async (fileExtension) => {
-              const uris = await vscode.workspace.findFiles(`**/*.${fileExtension}`);
+              const filesToFind = (typedPath === "") ? `**/*.${fileExtension}` : `${typedPath}/**/*.${fileExtension}`
+              const uris = await vscode.workspace.findFiles(filesToFind);
               return uris.sort().map(uri => {
-                const relativePathToMain = path.relative(path.dirname(mainLaTeXFile!!), uri.fsPath);
-                const completionItem = new vscode.CompletionItem(relativePathToMain, vscode.CompletionItemKind.File);
-  
+                const relativePathToMain = path.relative(path.dirname(mainLaTeXFile!!), uri.fsPath)
+                const relativePathToMainFinal = (typedPath === "") ? relativePathToMain : relativePathToMain.replace(typedPath + "/", "")
+                const completionItem = new vscode.CompletionItem(relativePathToMainFinal, vscode.CompletionItemKind.File);
+
                 const md = new vscode.MarkdownString(`![${macro.signature}](${uri.toString()}|width=500)`);
                 md.supportHtml = true;
                 md.isTrusted = true;
                 completionItem.documentation = md;
-  
+
                 return completionItem;
               });
             });
-  
+
           // Wait for all filePromises to finish and flatten the result
           const completionItemsForMacro = (await Promise.all(filePromises)).flat();
           if (completionItemsForMacro.length > 0) {
             completionItems.push(...completionItemsForMacro);
           }
         });
-  
+
         // Wait for all promises to finish before proceeding
         await Promise.all(promises);
-  
+
         if (skipSnippets) return completionItems
-        
+
         // Add macro snippets to the completion items
         for (const macro of validMacros) {
           const completionItem = new vscode.CompletionItem(macro.signature, vscode.CompletionItemKind.Method);
           const parts = linePrefix.endsWith('\\') ? macro.signature.substring(1) : macro.signature;
           const processedSignature = processMacroSignature(parts); // Helper function to process the signature
-  
+
           console.log(processedSignature);
           completionItem.insertText = new vscode.SnippetString(processedSignature);
           completionItem.documentation = new vscode.MarkdownString(
             `macro: ${macro.signature}\n\nPATH is the path to the file eg. rys/rys1.png`
           );
-  
+
           completionItems.push(completionItem);
         }
-  
+
         return completionItems;
       },
     });
-  
+
   context.subscriptions.push(disposable);
 
   vscode.commands.registerCommand("marcotex.insetToActiveDocument", async (contextSelection: vscode.Uri, uris: vscode.Uri[]) => {
@@ -256,7 +263,7 @@ export const activate = async (context: vscode.ExtensionContext) => {
         if (insertClearPage && counter % 2 === 0) finalMacros += '\n\\clearpage\n';
       }
       if (finalMacros === "") return;
-      if (uriArrayCleaned.length===1) finalMacros=processMacroSignature(finalMacros)
+      if (uriArrayCleaned.length === 1) finalMacros = processMacroSignature(finalMacros)
       const snippet = new vscode.SnippetString(finalMacros);
       editor.insertSnippet(snippet, position);
       vscode.window.showInformationMessage(`Inserted ${counter} macros`);
