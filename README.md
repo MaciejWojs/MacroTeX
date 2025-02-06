@@ -1,6 +1,22 @@
 # MacroTeX Usage Guide
-
 MacroTeX is a VSCode extension that helps with inserting macros in LaTeX documents.
+
+## Table of contents
+- [MacroTeX Usage Guide](#macrotex-usage-guide)
+  - [Table of contents](#table-of-contents)
+  - [Features](#features)
+  - [Getting Started](#getting-started)
+  - [Using MacroTeX](#using-macrotex)
+    - [Auto-completion](#auto-completion)
+    - [Image Preview](#image-preview)
+    - [Bulk Image Insertion](#bulk-image-insertion)
+  - [Configuration](#configuration)
+    - [Path Management](#path-management)
+    - [Custom Macros](#custom-macros)
+  - [Troubleshooting](#troubleshooting)
+    - [Common Issues](#common-issues)
+    - [Support](#support)
+
 
 ## Features
 

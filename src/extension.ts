@@ -99,6 +99,11 @@ export const activate = async (context: vscode.ExtensionContext) => {
         const linePrefix = normalizeMacroLine(line.substring(0, position.character));
         let completionItems: vscode.CompletionItem[] = [];
 
+        const config = vscode.workspace.getConfiguration('latexMacros');
+        if (!config) return [];
+        const useFolders = config.get("pathSuggestionsFolderBased") || false
+        console.log("useFolderBaseAproach", useFolders)
+
         // Process each valid macro
         const promises = validMacros.map(async (macro) => {
           const macroFirstPart = normalizeMacroLine(macro.signature.split("PATH")[0]);
@@ -113,31 +118,46 @@ export const activate = async (context: vscode.ExtensionContext) => {
           if (typedPath.endsWith("/")) typedPath = typedPath.slice(0, -1)
           console.log("typedPath: ", typedPath)
 
-          // Find files for each extension in parallel
+
           const filePromises = macro.extensions
             .map(ext => ext.toLowerCase())
-            .filter(ext => ["jpg", "jpeg", "png"].includes(ext)) // Filter for image extensions
+            .filter(ext => ["jpg", "jpeg", "png"].includes(ext))
             .map(async (fileExtension) => {
               const filesToFind = (typedPath === "") ? `**/*.${fileExtension}` : `${typedPath}/**/*.${fileExtension}`
               const uris = await vscode.workspace.findFiles(filesToFind);
               return uris.sort().map(uri => {
-                const relativePathToMain = path.relative(path.dirname(mainLaTeXFile!!), uri.fsPath)
-                const relativePathToMainFinal = (typedPath === "") ? relativePathToMain : relativePathToMain.replace(typedPath + "/", "")
-                const completionItem = new vscode.CompletionItem(relativePathToMainFinal, vscode.CompletionItemKind.File);
+                const relativePath = path.relative(path.dirname(mainLaTeXFile!!), uri.fsPath)
+                let finalPath = (typedPath === "") ? relativePath : relativePath.replace(typedPath + "/", "")
+                if (useFolders === true) {
+                  finalPath = finalPath.replace(/\/.*$/, "/")
+                }
 
-                const md = new vscode.MarkdownString(`![${macro.signature}](${uri.toString()}|width=500)`);
-                md.supportHtml = true;
-                md.isTrusted = true;
-                completionItem.documentation = md;
+                const kind = (finalPath.endsWith(".jpg") || finalPath.endsWith(".jpeg") || finalPath.endsWith(".png"))
+                  ? vscode.CompletionItemKind.File
+                  : vscode.CompletionItemKind.Folder;
+
+                const completionItem = new vscode.CompletionItem(finalPath, kind);
+
+                if (kind === vscode.CompletionItemKind.File) {
+                  const md = new vscode.MarkdownString(`![${macro.signature}](${uri.toString()}|width=500)`);
+                  md.supportHtml = true;
+                  md.isTrusted = true;
+                  completionItem.documentation = md;
+                }
 
                 return completionItem;
               });
             });
 
+
           // Wait for all filePromises to finish and flatten the result
           const completionItemsForMacro = (await Promise.all(filePromises)).flat();
           if (completionItemsForMacro.length > 0) {
-            completionItems.push(...completionItemsForMacro);
+            const itemsToAdd = useFolders
+              ? completionItemsForMacro.filter((item, index, self) => index === self.findIndex(t => t.label === item.label))
+              : completionItemsForMacro;
+
+            completionItems.push(...itemsToAdd);
           }
         });
 
