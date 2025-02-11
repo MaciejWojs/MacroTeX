@@ -69,7 +69,7 @@ Extension creates snippets from user defined macros.
 
 Example usage:
 
-![Inserting in bulk](https://i.postimg.cc/XJnhCdXh/bulk.gif)
+[![Inserting in bulk](https://i.postimg.cc/XJnhCdXh/bulk.gif)](https://postimg.cc/mc68xcYN)
 
 ## Configuration
 
