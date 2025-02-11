@@ -24,12 +24,22 @@ MacroTeX is a VSCode extension that helps with inserting macros in LaTeX documen
 2. Image preview on hover
 3. Bulk image insertion from explorer
 4. Configurable LaTeX macros
+5. Smart multi-document support:
+   - Automatic detection of main LaTeX files
+   - Intelligent path resolution based on document hierarchy
+6. File system tracking:
+   - Automatic path updates when files are moved or renamed
+   - Smart commenting of references to deleted files
+7. Enhanced path suggestions:
+   - Prioritized local files in suggestions
+   - Intelligent path completion based on context
 
 ## Getting Started
 
 1. Install the MacroTeX extension from the VSCode marketplace
 2. Open your LaTeX project in VSCode
-3. The extension will automatically detect your main LaTeX file
+3. The extension will automatically detect all main LaTeX files in your workspace
+4. Start using macros in any .tex file - paths will be automatically resolved to the nearest main file
 
 ## Using MacroTeX
 
@@ -59,7 +69,7 @@ Extension creates snippets from user defined macros.
 
 Example usage:
 
-![Inserting in bulk](assets/bulk.gif)
+![Inserting in bulk](https://i.postimg.cc/XJnhCdXh/bulk.gif)
 
 ## Configuration
 
@@ -75,8 +85,10 @@ Configure macros in VSCode settings. Example minimal setup:
 ```
 
 ### Path Management
-- Automatic relative path generation to main LaTeX file
-- Smart path completion based on workspace
+- Automatic detection and handling of multiple main LaTeX files
+- Smart relative path generation based on document hierarchy
+- Automatic path updates when files are moved or renamed
+- Intelligent handling of deleted files
 - Support for nested directory structures
 
 ### Custom Macros
@@ -115,9 +127,14 @@ Corresponding LaTeX macro:
 1. Macro not appearing in suggestions
     - Check if file extension is supported
     - Verify macro configuration in settings
+    - Ensure there is a main LaTeX file in your workspace
 2. Image preview not working
     - Ensure image path is correct
     - Check if image format is supported
+    - Verify the path relative to the main LaTeX file
+3. Path resolution issues
+    - Check if your document is in the same workspace as the main LaTeX file
+    - Verify that the file contains a \documentclass declaration
 
 ### Support
 - Report issues on GitHub repository

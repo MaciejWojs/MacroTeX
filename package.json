@@ -23,7 +23,7 @@
   },
   "//": "START EXTENSION ATTRIBUTES",
   "name": "MacroTeX",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "A VSCode extension to insert LaTeX macros mainly for figures and images with automatic path completion",
   "displayName": "MacroTeX",
   "categories": [

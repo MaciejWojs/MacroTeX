@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+# [0.1.4]
+
+### Added
+- Improved support for Windows file paths
+- Enhanced path handling for cross-platform compatibility
+- Added diagnostic output channel for improved debugging and user feedback
+- Added support for multiple main LaTeX files
+- Added automatic file tracking system:
+  - Comment out references to deleted files
+  - Update paths in documents when files are renamed
+- Added comprehensive JSDoc documentation
+
+### Changed
+- Optimized file searching pattern (GLOB) to reduce disk I/O operations
+- Updated changelog format and structure
+- Refined path resolution logic for Windows environments
+- Restructured code for better maintainability:
+  - Extracted common functionality into separate functions
+  - Improved type safety and error handling
+  - Added better function documentation
+
 # [0.1.3]
 
 ### Added
