@@ -33,6 +33,7 @@ MacroTeX is a VSCode extension that helps with inserting macros in LaTeX documen
 7. Enhanced path suggestions:
    - Prioritized local files in suggestions
    - Intelligent path completion based on context
+8. Support for various file extensions in path suggestions
 
 ## Getting Started
 
@@ -46,7 +47,7 @@ MacroTeX is a VSCode extension that helps with inserting macros in LaTeX documen
 ### Auto-completion
 
 1. Start typing a LaTeX macro (e.g. `\fg`) in your .tex file
-2. The extension will show available paths that match the macro's file typrs requirements
+2. The extension will show available paths that match the macro's file types requirements
 3. Select a path to automatically insert the complete macro with proper paths
 
 Extension creates snippets from user defined macros.

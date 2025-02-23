@@ -2,105 +2,28 @@ import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
 
-/**
- * Searches the current workspace for all .tex files and returns a list of file paths that are likely
- * to be main LaTeX files (i.e., files containing a '\documentclass' declaration).
- *
- * The function performs the following steps:
- * 1. Finds all files ending with the .tex extension.
- * 2. Reads the contents of each file and checks for the presence of '\documentclass'.
- * 3. Converts qualifying file paths using a Windows-specific formatting function.
- * 4. Returns a promise that resolves with an array of formatted file paths for main LaTeX files.
- *
- * @returns {Promise<string[]>} A promise that resolves with an array of file paths for the main LaTeX files.
- *
- * @throws Logs an error to the console and returns an empty array if an exception occurs during the search or file processing.
- */
-export async function findAllMainLaTeXFiles(): Promise<string[]> {
+async function findMainLaTeXFile(): Promise<string | null> {
   try {
-    const texFiles = await vscode.workspace.findFiles('**/*.tex');
-    const fileChecks = texFiles.map(async file => {
+    const files = await vscode.workspace.findFiles('**/*.tex');
+
+    for (const file of files) {
       const content = await vscode.workspace.fs.readFile(file);
       const text = Buffer.from(content).toString('utf-8');
-      return text.includes('\\documentclass') ? replaceWindowsPath(file.fsPath) : null;
-    });
 
-    const results = await Promise.all(fileChecks);
-    const mainFiles = results.filter((path): path is string => path !== null)
-    return mainFiles;
+      if (text.includes('\\documentclass')) {
+        return replaceWindowsPath(file.fsPath);
+      }
+    }
+
+    return null;
   } catch (error) {
-    console.error('Error finding main LaTeX files:', error);
-    return [];
+    console.error('Error finding main LaTeX file:', error);
+    return null;
   }
 }
 
-/**
- * Finds the main LaTeX file that is closest to the current active file.
- *
- * This function determines the active file either from the provided file system path or the active text editor.
- * It then retrieves a list of main LaTeX files—either from the provided array or by dynamically searching for them.
- * The function computes the relative path depth of each main LaTeX file with respect to the active file and returns
- * the file with the smallest depth (i.e., the one closest in terms of directory traversal).
- *
- * @param fsPath - An optional file system path to use instead of the active text editor's file.
- * @param mainLaTeXFiles - An optional array of paths to main LaTeX files.
- * @returns The path of the closest main LaTeX file, or null if no suitable file is found.
- */
-async function findClosestMainLaTeXFile(fsPath?: string, mainLaTeXFiles?: string[]) {
-  const activeFile = (!fsPath) ? vscode.window.activeTextEditor?.document.uri.fsPath : fsPath;
-  if (!activeFile) return null;
-
-  const files = mainLaTeXFiles || await findAllMainLaTeXFiles();
-  if (files.length === 0) return null;
-
-  return files.reduce((closest, file) => {
-    const relativePath = replaceWindowsPath(path.relative(file, activeFile));
-    const relativeClosest = replaceWindowsPath(path.relative(closest, activeFile));
-    const relativePathDepth = relativePath.split('../').length - 1;
-    const closestPathDepth = closest ? relativeClosest.split('../').length - 1 : Infinity;
-    return relativePathDepth < closestPathDepth ? file : closest;
-  });
-}
-
-/**
- * Gets the relative path from a file to the main LaTeX file.
- * 
- * @param file - The file to get the relative path to the main LaTeX file
- * @param mainLaTeXFile - The main LaTeX file to get the relative path to
- * @returns The relative path from the file to the main LaTeX file
- */
-function getRelativePathToMain(file: string, mainLaTeXFile: string): string;
-function getRelativePathToMain(file: string): Promise<string>;
-
-function getRelativePathToMain(file: string, mainLaTeXFile?: string): Promise<string> | string {
-  if (mainLaTeXFile) {
-    return replaceWindowsPath(path.relative(path.dirname(mainLaTeXFile), file));
-  } else {
-    const mainFile = findClosestMainLaTeXFile().then(mainFile => {
-      if (!mainFile) return "";
-      return getRelativePathToMain(file, mainFile);
-    });
-    return mainFile;
-  }
-}
-
-
-/**
- * Transforms a LaTeX macro signature into a VS Code snippet format.
- * 
- * @param signature - The LaTeX macro signature to process (e.g. "\includegraphics[width=\textwidth]{PATH}")
- * @returns A string formatted as a VS Code snippet with placeholders for arguments
- * 
- * @example
- * processMacroSignature("\includegraphics[width=\textwidth]{PATH}")
- * Returns: "\includegraphics[${1:width=\textwidth}]{${2:PATH}}"
- * 
- * The function:
- * - Converts {...} into {${n:...}}
- * - Converts [...] into [${n:...}]
- * - Increments n for each placeholder
- */
-function processMacroSignature(signature: string): string {
+// Helper function to process macro signatures
+function processMacroSignature(signature: string) {
   let i = 1;
   return signature
     .replace(/\{/g, () => `{$\{${i++}:`)  // Handle required arguments
@@ -109,66 +32,47 @@ function processMacroSignature(signature: string): string {
     .replace(']', '}]');
 }
 
-/**
- * Replaces Windows path separators with POSIX path separators.
- * 
- * @param _path - The path to process
- * @returns The path with all Windows path separators replaced with POSIX path separators
- */
-function replaceWindowsPath(_path: string): string {
+function replaceWindowsPath(_path: string) {
   return _path.replaceAll(path.sep, path.posix.sep);
 }
 
-/**
- * Checks if a file is an image file based on its extension.
- * 
- * @param file - The file to check
- * @returns True if the file is an image file, false otherwise
- */
-function isImageFile(file: string): boolean {
+function isImageFile(file: string) {
   file = file.toLowerCase();
   return file.endsWith('.png') || file.endsWith('.jpg') || file.endsWith('.jpeg');
 }
 
-/**
- * Generates a MarkdownString with an image preview.
- * 
- * @param uri - The URI of the image to preview
- * @param alt - The alt text of the image
- * @param width - The width of the image
- * @returns A MarkdownString with an image preview
- */
-function getPreviewImageString(uri: vscode.Uri, alt: string = "img", width: number = 500): vscode.MarkdownString {
-  const imgString: string = `![${alt}](${uri.toString()}|width=${width})`;
-  return getPreviewMdString(imgString)
-}
-
-
-/**
- * Generates a MarkdownString with the provided string.
- * 
- * @param str - The string to display
- * @returns A MarkdownString with the provided string
- */
-function getPreviewMdString(str: string = "img"): vscode.MarkdownString {
-  const md = new vscode.MarkdownString(str);
-  md.supportHtml = true;
-  md.isTrusted = true;
-  return md;
-}
-
-// let mainLaTeXFile: string | null = null;
+let mainLaTeXFile: string | null = null;
 
 export const activate = async (context: vscode.ExtensionContext) => {
   const channel = vscode.window.createOutputChannel("MacroTex");
   channel.appendLine("MacroTex is now active!");
   console.log("Extension MacroTex is now active!");
-  // console.log("Main LaTeX file found", mainLaTeXFile);
-  // channel.appendLine(`Main LaTeX file found: ${mainLaTeXFile}`);
+  mainLaTeXFile = await findMainLaTeXFile();
 
-  // const mainfiles = (await findAllMainLaTeXFiles()).join("\n");
-  // console.log("Main LaTeX files found", mainfiles);
-  // channel.appendLine(`Main LaTeX files found: ${mainfiles}`);
+  context.subscriptions.push(
+    vscode.workspace.onDidRenameFiles((e) => {
+      for (const file of e.files) {
+        if (file.oldUri.fsPath === mainLaTeXFile) {
+          const oldMainLaTeXFile = mainLaTeXFile;
+          mainLaTeXFile = file.newUri.fsPath;
+          console.log(`Main LaTeX file changed from ${oldMainLaTeXFile} to ${mainLaTeXFile}`);
+          channel.appendLine(`Main LaTeX file changed from ${oldMainLaTeXFile} to ${mainLaTeXFile}`);
+        }
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.workspace.onDidDeleteFiles(async (e) => {
+      for (const file of e.files) {
+        if (file.fsPath === mainLaTeXFile) {
+          mainLaTeXFile = await findMainLaTeXFile();
+          console.log(`Main LaTeX file deleted, new main LaTeX file: ${mainLaTeXFile}`);
+          channel.appendLine(`Main LaTeX file deleted, new main LaTeX file: ${mainLaTeXFile}`);
+        }
+      }
+    })
+  )
 
   // Get the configuration for your extension
   const config = vscode.workspace.getConfiguration('latexMacros');
@@ -181,35 +85,25 @@ export const activate = async (context: vscode.ExtensionContext) => {
   }
 
   console.log("Macros loaded", macrosList);
-  // console.log(mainLaTeXFile);
+  console.log(mainLaTeXFile);
   channel.appendLine(`MarcoTex: Found ${macrosList.length} macros`);
-  // channel.appendLine(`MarcoTex: Main LaTeX file: ${mainLaTeXFile}`);
+  channel.appendLine(`MarcoTex: Main LaTeX file: ${mainLaTeXFile}`);
   vscode.window.showInformationMessage(`MarcoTex: Found ${macrosList.length} macros`);
 
-  /**
-   * Normalizes a macro line by removing specific content within brackets and braces
-   * @param line - The input string to normalize
-   * @returns A normalized string with bracket/brace contents replaced with empty pairs
-   * @example
-   * normalizeMacroLine("foo[bar]") // returns "foo[]"
-   * normalizeMacroLine("baz{qux}") // returns "baz{}"
-   */
-  const normalizeMacroLine = (line: string): string => {
+  const normalizeMacroLine = (line: string) => {
     return line
       .trim()
       .replace(/\[.*?\]/g, '[]')
       .replace(/\{.*?\}/g, '{}');
   }
 
-  const registerCompletionItemProvider = vscode.languages.registerCompletionItemProvider(
+  const disposable = vscode.languages.registerCompletionItemProvider(
     "latex",
     {
       async provideCompletionItems(
         document: vscode.TextDocument,
         position: vscode.Position
       ) {
-        const mainLaTeXFile = await findClosestMainLaTeXFile();
-        channel.appendLine(`Main LaTeX file: ${mainLaTeXFile}`);
         if (!mainLaTeXFile || !macrosList) return [];  // Early return if data is missing
         let skipSnippets = false
         // Filter macros with "PATH" in the signature only once
@@ -230,12 +124,16 @@ export const activate = async (context: vscode.ExtensionContext) => {
           const macroFirstPart = normalizeMacroLine(macro.signature.split("PATH")[0]);
           console.log(`${linePrefix} === ${macroFirstPart} -> ${linePrefix === macroFirstPart}`);
 
+
           // Only process if the prefix matches
           if (!linePrefix.includes(macroFirstPart)) return;
           else skipSnippets = true
 
           let typedPath = linePrefix.replace(macroFirstPart, "")
           if (typedPath.endsWith("/")) typedPath = typedPath.slice(0, -1)
+          const tempString = `typedPath: ${typedPath}`
+          console.log(tempString)
+          // channel.appendLine(tempString)
 
           const extensionsGlob = macro.extensions
             .map(ext => ext.toLowerCase())
@@ -244,15 +142,14 @@ export const activate = async (context: vscode.ExtensionContext) => {
 
           const filePromises = [(async () => {
             const searchPattern = !typedPath
-              ? `**/*.{${extensionsGlob}}`
-              : `**/${typedPath}/**/*.{${extensionsGlob}}`;
+            ? `**/*.{${extensionsGlob}}`
+            : `**/${typedPath}/**/*.{${extensionsGlob}}`;
             channel.appendLine(`Searching for files with pattern: ${searchPattern}`);
             const uris = await vscode.workspace.findFiles(searchPattern);
 
             return uris.sort().map(uri => {
               const fsPath = replaceWindowsPath(uri.fsPath)
-              // const relativePath = replaceWindowsPath(path.relative(path.dirname(mainLaTeXFile!!), fsPath))
-              const relativePath = getRelativePathToMain(fsPath, mainLaTeXFile)
+              const relativePath = replaceWindowsPath(path.relative(path.dirname(mainLaTeXFile!!), fsPath))
               let finalPath = (typedPath === "") ? relativePath : relativePath.replace(typedPath + "/", "")
               if (useFolders === true) {
                 finalPath = finalPath.replace(/\/.*$/, "/")
@@ -262,15 +159,13 @@ export const activate = async (context: vscode.ExtensionContext) => {
                 ? vscode.CompletionItemKind.File
                 : vscode.CompletionItemKind.Folder;
 
-              // const filename = path.basename(finalPath, path.extname(finalPath))
-              // channel.appendLine(`Found file: ${finalPath} with kind: ${kind} and filename: ${filename}`);
-
-              const sortText = !finalPath.startsWith("../") ? "A" : "B";
               const completionItem = new vscode.CompletionItem(replaceWindowsPath(finalPath), kind);
-              completionItem.sortText = sortText
 
               if (kind === vscode.CompletionItemKind.File) {
-                completionItem.documentation = getPreviewImageString(uri, macro.signature);
+                const md = new vscode.MarkdownString(`![${macro.signature}](${uri.toString()}|width=500)`);
+                md.supportHtml = true;
+                md.isTrusted = true;
+                completionItem.documentation = md;
               }
 
               return completionItem;
@@ -296,7 +191,7 @@ export const activate = async (context: vscode.ExtensionContext) => {
 
         // Add macro snippets to the completion items
         for (const macro of validMacros) {
-          const completionItem = new vscode.CompletionItem(macro.signature, vscode.CompletionItemKind.Snippet);
+          const completionItem = new vscode.CompletionItem(macro.signature, vscode.CompletionItemKind.Method);
           const parts = linePrefix.endsWith('\\') ? macro.signature.substring(1) : macro.signature;
           const processedSignature = processMacroSignature(parts); // Helper function to process the signature
 
@@ -308,13 +203,14 @@ export const activate = async (context: vscode.ExtensionContext) => {
 
           completionItems.push(completionItem);
         }
+
         return completionItems;
       },
     });
 
+  context.subscriptions.push(disposable);
 
   vscode.commands.registerCommand("marcotex.insetToActiveDocument", async (contextSelection: vscode.Uri, uris: vscode.Uri[]) => {
-    const mainLaTeXFile = await findClosestMainLaTeXFile();
     const config = vscode.workspace.getConfiguration('latexMacros');
     const options = macrosList?.map(macro => macro.signature).filter(macro => macro.includes("PATH"));
     const editor = vscode.window.activeTextEditor;
@@ -329,6 +225,7 @@ export const activate = async (context: vscode.ExtensionContext) => {
     const position = editor.selection.active;
     if (!position) return;
 
+
     const selectedOption = await vscode.window.showQuickPick(options, {
       placeHolder: 'Select a macro to insert',
     });
@@ -340,13 +237,13 @@ export const activate = async (context: vscode.ExtensionContext) => {
     // Process URIs: find files in directories or return the URI itself
     const urisArray = await Promise.all(uriArray.map(async (uri) => {
       if (fs.statSync(uri.fsPath).isDirectory()) {
-        const extensionsGlob = fileExtensions.join(',');
-        const pattern = `**/*.{${extensionsGlob}}`;
-        channel.appendLine(`Searching for files with pattern: ${pattern}`);
-        const results = await vscode.workspace.findFiles(
-          new vscode.RelativePattern(uri.fsPath, pattern)
-        );
-        return results;
+      const extensionsGlob = fileExtensions.join(',');
+      const pattern = `**/*.{${extensionsGlob}}`;
+      channel.appendLine(`Searching for files with pattern: ${pattern}`);
+      const results = await vscode.workspace.findFiles(
+        new vscode.RelativePattern(uri.fsPath, pattern)
+      );
+      return results;
       }
       return [uri];
     }));
@@ -398,18 +295,15 @@ export const activate = async (context: vscode.ExtensionContext) => {
       for (const uri of uriArrayCleaned) {
         ++counter;
 
-        const relativePathToMain = getRelativePathToMain(uri.fsPath, mainLaTeXFile);
+        const relativePathToMain = replaceWindowsPath(path.relative(path.dirname(mainLaTeXFile), uri.fsPath));
         const folderBasename = replaceWindowsPath(path.basename(path.dirname(uri.fsPath)));
         const basename = replaceWindowsPath(path.basename(uri.fsPath).split('.')[0]);
 
-        const Caption = basename
-        const Identifier = `${folderBasename}-${basename}`.replaceAll(" ", "-");
+        const captionAndIdentifier = `${folderBasename}-${basename}`;
         const macro = '\n' + selectedOption
           .replace("PATH", relativePathToMain)
-          .replace("Identifier", Identifier)
-          .replace("Caption", Caption)
-
-        channel.appendLine(`relativePathToMain: ${relativePathToMain}`);
+          .replace("Identifier", captionAndIdentifier)
+          .replace("Caption", captionAndIdentifier)
 
         finalMacros += macro;
         if (insertClearPage && counter % 2 === 0) finalMacros += '\n\\clearpage\n';
@@ -424,197 +318,33 @@ export const activate = async (context: vscode.ExtensionContext) => {
     }
   });
 
-  //! TODO: Add a functionality to detect changes in the file system and update the macros in current file scope accordingly
 
-  const onDidDeleteFiles = vscode.workspace.onDidDeleteFiles(async (event) => {
-    const mainLaTeXFiles = await findAllMainLaTeXFiles();
-    if (mainLaTeXFiles.length === 0) return;
-    channel.appendLine(`Files deleted: ${event.files}`);
-    // const mainLaTeXFile = await findClosestMainLaTeXFile();
-    const config = vscode.workspace.getConfiguration('latexMacros');
-    if (!config) {
-      vscode.window.showErrorMessage("No configuration found");
-      return;
-    }
+  const hover = vscode.languages.registerHoverProvider('latex', {
+    provideHover(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): vscode.ProviderResult<vscode.Hover> {
+      if (!mainLaTeXFile) return undefined;
 
-    const macrosList: { signature: string, extensions: string[] }[] | undefined = config.get('macrosList');
-    if (!macrosList || macrosList.length === 0) {
-      vscode.window.showErrorMessage("No macros defined");
-      return;
-    }
-    const fileTypes = new Set(...macrosList.map(macro => macro.extensions));
-    for (const fileType of fileTypes) {
-      channel.appendLine(`Files types: ${fileType}`);
-    }
-
-    // Get all deleted non-tex files and find their corresponding LaTeX scopes
-    const files = event.files.filter(uri => !uri.fsPath.endsWith('.tex'));
-    const scopes = new Set(
-      (await Promise.all(files.map(uri => findClosestMainLaTeXFile(uri.fsPath, mainLaTeXFiles))))
-        .filter((scope): scope is string => scope !== null)
-    );
-
-    // Get base directories for each scope
-    const scopeBaseDirs = new Set([...scopes].map(scope => replaceWindowsPath(path.dirname(scope))));
-
-    // Process each base directory
-    for (const baseDir of scopeBaseDirs) {
-      const mainFile = [...scopes].find(scope => scope.startsWith(baseDir));
-      const deletedFiles = files.filter(uri => replaceWindowsPath(uri.fsPath).startsWith(baseDir))
-      if (!mainFile || deletedFiles.length === 0) continue;
-
-      const texFiles = (await vscode.workspace.findFiles(new vscode.RelativePattern(baseDir, '**/*.tex')))
-      channel.appendLine(`Main file: ${mainFile}`);
-      channel.appendLine(`Deleted files:\n ${deletedFiles.join('\n')}`);
-
-      // Process each tex file in the scope
-      for (const texFile of texFiles) {
-        try {
-          const content = await vscode.workspace.fs.readFile(texFile);
-          const buffer = Buffer.from(content).toString('utf-8');
-          const lines = buffer.split('\n');
-
-          // Comment out lines that reference deleted files
-          const updatedLines = lines.map(line => {
-            if (line.trim().startsWith('%')) return line;
-            const shouldComment = deletedFiles.some(file => {
-              const relativePath = getRelativePathToMain(file.fsPath, mainFile);
-              return line.includes(relativePath) && macrosList.some(macro =>
-                normalizeMacroLine(line).includes(normalizeMacroLine(macro.signature.split('PATH')[0]))
-              );
-            });
-            return shouldComment ? `%${line}` : line;
-          });
-
-
-          const updatedContent = updatedLines.join('\n');
-          if (updatedContent !== buffer) {
-            // Instead of writing directly to disk, open the document and apply an edit
-            const doc = await vscode.workspace.openTextDocument(texFile);
-            const fullRange = new vscode.Range(
-              doc.positionAt(0),
-              doc.lineAt(doc.lineCount - 1).range.end
-            );
-            const edit = new vscode.WorkspaceEdit();
-            edit.replace(doc.uri, fullRange, updatedContent);
-            await vscode.workspace.applyEdit(edit);
-          }
-        } catch (error) {
-          console.error('Error processing file:', error);
-        }
-      }
-    }
-  });
-
-  const onDidRenameFiles = vscode.workspace.onDidRenameFiles(async (event) => {
-    const mainLaTeXFiles = await findAllMainLaTeXFiles();
-    if (mainLaTeXFiles.length === 0) return;
-    channel.appendLine(`Files renamed: ${event.files.map(f => f.oldUri.fsPath).join(', ')}`);
-
-    const config = vscode.workspace.getConfiguration('latexMacros');
-    if (!config) {
-      vscode.window.showErrorMessage("No configuration found");
-      return;
-    }
-
-    const macrosList: { signature: string, extensions: string[] }[] | undefined = config.get('macrosList');
-    if (!macrosList || macrosList.length === 0) {
-      vscode.window.showErrorMessage("No macros defined");
-      return;
-    }
-
-    const fileTypes = new Set(...macrosList.map(macro => macro.extensions));
-    for (const fileType of fileTypes) {
-      channel.appendLine(`Files types: ${fileType}`);
-    }
-
-    // Get all renamed non-tex files and find their corresponding LaTeX scopes
-    const renamedFiles = event.files.filter(f => !f.oldUri.fsPath.endsWith('.tex'));
-    const scopes = new Set(
-      (await Promise.all(renamedFiles.map(f => findClosestMainLaTeXFile(f.oldUri.fsPath, mainLaTeXFiles))))
-        .filter((scope): scope is string => scope !== null)
-    );
-
-    // Get base directories for each scope
-    const scopeBaseDirs = new Set([...scopes].map(scope => replaceWindowsPath(path.dirname(scope))));
-
-    const isMacroInLine = (line: string): boolean => {
-      return macrosList.some(macro =>
-        normalizeMacroLine(line).includes(normalizeMacroLine(macro.signature.split('PATH')[0]))
-      );
-    }
-
-    // Process each base directory
-    for (const baseDir of scopeBaseDirs) {
-      const mainFile = [...scopes].find(scope => scope.startsWith(baseDir));
-      const filesInBaseDir = renamedFiles.filter(f => replaceWindowsPath(f.oldUri.fsPath).startsWith(baseDir));
-      if (!mainFile || filesInBaseDir.length === 0) continue;
-
-      const texFiles = (await vscode.workspace.findFiles(new vscode.RelativePattern(baseDir, '**/*.tex')));
-      channel.appendLine(`Main file: ${mainFile}`);
-      channel.appendLine(`Renamed files:\n ${filesInBaseDir.map(f => f.oldUri.fsPath).join('\n')}`);
-      // Process each tex file in the scope
-      for (const texFile of texFiles) {
-        try {
-          const content = await vscode.workspace.fs.readFile(texFile);
-          const buffer = Buffer.from(content).toString('utf-8');
-          const lines = buffer.split('\n');
-
-          // Update lines that reference renamed files
-          const updatedLines = lines.map(line => {
-            let updatedLine = line;
-            for (const file of filesInBaseDir) {
-              const oldPath = getRelativePathToMain(file.oldUri.fsPath, mainFile);
-              const newPath = getRelativePathToMain(file.newUri.fsPath, mainFile);
-              if (line.includes(oldPath) && isMacroInLine(line)) {
-                updatedLine = line.replace(oldPath, newPath);
-              }
-            }
-            return updatedLine;
-          });
-
-          const updatedContent = updatedLines.join('\n');
-          if (updatedContent !== buffer) {
-            // Instead of writing directly to disk, open the document and apply an edit
-            const doc = await vscode.workspace.openTextDocument(texFile);
-            const fullRange = new vscode.Range(
-              doc.positionAt(0),
-              doc.lineAt(doc.lineCount - 1).range.end
-            );
-            const edit = new vscode.WorkspaceEdit();
-            edit.replace(doc.uri, fullRange, updatedContent);
-            await vscode.workspace.applyEdit(edit);
-          }
-        } catch (error) {
-          console.error('Error processing file:', error);
-        }
-      }
-    }
-  });
-
-  const registerHoverProvider = vscode.languages.registerHoverProvider('latex', {
-    async provideHover(document: vscode.TextDocument, position: vscode.Position) {
-      const mainLaTeXFile = await findClosestMainLaTeXFile();
       const range = document.getWordRangeAtPosition(position, /\{[^}]*\}/);
-      if (!mainLaTeXFile || !range) return undefined;
+      if (!range) return undefined;
 
       const hoverText = document.getText(range).replace(/[\{\}]/g, '');
 
       if (isImageFile(hoverText)) {
         const fullPath = path.resolve(path.dirname(mainLaTeXFile), hoverText);
         const uri = vscode.Uri.file(fullPath);
-        const md = (fs.existsSync(fullPath)) ?
-          getPreviewImageString(uri) :
-          getPreviewMdString("<h1>File not found in filesystem!</h1>");
+        const md = (fs.existsSync(fullPath)) ? `![img](${uri.toString()}|width=500)` : "<h1>File not found in filesystem!</h1>";
 
-        return new vscode.Hover(md);
+        console.log(md);
+        const mdString = new vscode.MarkdownString(md);
+        mdString.supportHtml = true;
+        mdString.isTrusted = true;
+        return new vscode.Hover(mdString);
       }
       return undefined;  // Return undefined if there's no hover information
     }
   });
 
-  // context.subscriptions.push(onDidDeleteFiles, onDidRenameFiles, registerHoverProvider, registerCompletionItemProvider);
-  context.subscriptions.push(onDidDeleteFiles, onDidRenameFiles, registerHoverProvider, registerCompletionItemProvider);
+  context.subscriptions.push(hover);
+
 };
 
 export const deactivate = () => { };
