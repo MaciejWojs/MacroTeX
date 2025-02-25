@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+# [0.1.6]
+
+### Added
+- Dodano nową funkcję automatycznego uzupełniania dla plików z rozszerzeniami innymi niż obrazy
+- Dodano obsługę nowych typów plików w sugestiach ścieżek
+
+### Fixed
+- Naprawiono błąd powodujący nieprawidłowe wyświetlanie sugestii ścieżek dla niektórych typów plików
+- In previous version accidentally brought back older algorithm
+
+# [0.1.5]
+
+### Fixed
+- Files with extensions other than images are now suggested in auto-completion
+- Improved handling of file extensions in path suggestions
+
 # [0.1.4]
 
 ### Added

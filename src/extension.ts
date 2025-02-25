@@ -239,7 +239,7 @@ export const activate = async (context: vscode.ExtensionContext) => {
 
           const extensionsGlob = macro.extensions
             .map(ext => ext.toLowerCase())
-            .filter(ext => ["jpg", "jpeg", "png"].includes(ext))
+            // .filter(ext => ["jpg", "jpeg", "png"].includes(ext))
             .join(",");
 
           const filePromises = [(async () => {
