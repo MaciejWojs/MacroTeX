@@ -4,14 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+# [0.1.7]
+
+### Added
+- Added macro filtering based on file extensions when using context commands
+
+### Changed
+- Improved directory handling when using context commands
+
 # [0.1.6]
 
 ### Added
-- Dodano nową funkcję automatycznego uzupełniania dla plików z rozszerzeniami innymi niż obrazy
-- Dodano obsługę nowych typów plików w sugestiach ścieżek
+- Added new auto-completion functionality for files with extensions other than images
+- Added support for new file types in path suggestions
 
 ### Fixed
-- Naprawiono błąd powodujący nieprawidłowe wyświetlanie sugestii ścieżek dla niektórych typów plików
+- Fixed a bug causing incorrect path suggestions display for certain file types
 - In previous version accidentally brought back older algorithm
 
 # [0.1.5]

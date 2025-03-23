@@ -329,9 +329,42 @@ export const activate = async (context: vscode.ExtensionContext) => {
     const position = editor.selection.active;
     if (!position) return;
 
-    const selectedOption = await vscode.window.showQuickPick(options, {
-      placeHolder: 'Select a macro to insert',
-    });
+    // Determine file extensions to use for filtering macros
+    let fileExtensionsToUse: string[] = [];
+
+    if (uris.length === 1 && fs.statSync(uris[0].fsPath).isDirectory()) {
+      // If a single directory is selected, find all files inside
+      const filesInDir = await vscode.workspace.findFiles(new vscode.RelativePattern(uris[0].fsPath, '**/*'));
+      const extensions = [...new Set(filesInDir.map(uri => path.extname(uri.fsPath).slice(1).toLowerCase()))];
+
+      // If all files have the same extension, use that
+      if (extensions.length === 1) {
+        fileExtensionsToUse = extensions;
+      }
+    } else if (uris.length > 0 && fs.statSync(uris[0].fsPath).isFile()) {
+      // If files are selected directly, use the extension of the first file
+      fileExtensionsToUse = [path.extname(uris[0].fsPath).slice(1).toLowerCase()];
+    }
+
+    // Filter macros based on file extensions
+    const validMacros = fileExtensionsToUse.length > 0
+      ? macrosList?.filter(macro => macro.extensions.some(ext => fileExtensionsToUse.includes(ext)))
+      : macrosList;
+
+    // Extract macro signatures with PATH
+    const macroOptions = validMacros?.map(macro => macro.signature).filter(macro => macro.includes("PATH")) || [];
+
+    if (macroOptions.length === 0) {
+      vscode.window.showErrorMessage("No valid macros found for the selected files. Please check the configuration.");
+      return;
+    }
+
+    // If only one option, use it directly; otherwise ask user to choose
+    const selectedOption = macroOptions.length === 1
+      ? macroOptions[0]
+      : await vscode.window.showQuickPick(macroOptions, {
+        placeHolder: 'Select a macro to insert',
+      });
 
     const fileExtensions = macrosList?.find(macro => macro.signature === selectedOption)?.extensions;
     if (!fileExtensions) return;
