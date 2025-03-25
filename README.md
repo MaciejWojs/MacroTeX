@@ -10,6 +10,7 @@ MacroTeX is a VSCode extension that helps with inserting macros in LaTeX documen
     - [Auto-completion](#auto-completion)
     - [Image Preview](#image-preview)
     - [Bulk Image Insertion](#bulk-image-insertion)
+    - [Table Generator Sidebar](#table-generator-sidebar)
   - [Configuration](#configuration)
     - [Path Management](#path-management)
     - [Custom Macros](#custom-macros)
@@ -34,6 +35,9 @@ MacroTeX is a VSCode extension that helps with inserting macros in LaTeX documen
    - Prioritized local files in suggestions
    - Intelligent path completion based on context
 8. Support for various file extensions in path suggestions
+9. Table Generator Sidebar:
+   - Visual creation of LaTeX tables
+   - Direct insertion into documents
 
 ## Getting Started
 
@@ -71,6 +75,15 @@ Extension creates snippets from user defined macros.
 Example usage:
 
 [![Inserting in bulk](https://i.postimg.cc/XJnhCdXh/bulk.gif)](https://i.postimg.cc/XJnhCdXh/bulk.gif)
+
+### Table Generator Sidebar
+
+1. Open the sidebar by clicking on the MacroTeX icon in the activity bar
+2. Use the Table Generator panel to:
+   - Set the number of rows and columns
+   - Preview the table structure
+3. Click "Convert to LaTeX" to add the LaTeX table code to your active document
+4. The table will be inserted at the current cursor position with proper LaTeX formatting
 
 ## Configuration
 

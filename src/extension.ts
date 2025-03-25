@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
-
+import { TableGeneratorBarProvider } from "./TableGeneratorBarProvider";
 /**
  * Searches the current workspace for all .tex files and returns a list of file paths that are likely
  * to be main LaTeX files (i.e., files containing a '\documentclass' declaration).
@@ -163,6 +163,21 @@ export const activate = async (context: vscode.ExtensionContext) => {
   const channel = vscode.window.createOutputChannel("MacroTex");
   channel.appendLine("MacroTex is now active!");
   console.log("Extension MacroTex is now active!");
+
+  const sidebarProvider = new TableGeneratorBarProvider(context.extensionUri);
+  const dsp2 = vscode.window.registerWebviewViewProvider(TableGeneratorBarProvider.viewType, sidebarProvider);
+
+  const dsp1 = vscode.commands.registerCommand('marcotex.sidebarView.focus', () => {
+    vscode.commands.executeCommand('workbench.view.extension.marcotex');
+  });
+  
+  const dsp3 = vscode.commands.registerCommand("marcotex.showPanel", async () => {
+    await vscode.commands.executeCommand('marcotex.sidebarView.focus');
+  });  
+  
+  context.subscriptions.push(
+    dsp1, dsp2, dsp3
+  );
   // console.log("Main LaTeX file found", mainLaTeXFile);
   // channel.appendLine(`Main LaTeX file found: ${mainLaTeXFile}`);
 
@@ -646,8 +661,9 @@ export const activate = async (context: vscode.ExtensionContext) => {
     }
   });
 
+
   // context.subscriptions.push(onDidDeleteFiles, onDidRenameFiles, registerHoverProvider, registerCompletionItemProvider);
   context.subscriptions.push(onDidDeleteFiles, onDidRenameFiles, registerHoverProvider, registerCompletionItemProvider);
 };
 
-export const deactivate = () => { };
+export const deactivate = () => { }

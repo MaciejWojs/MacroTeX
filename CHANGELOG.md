@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+# [0.1.8]
+
+### Added
+- Added new LaTeX Table Generator sidebar UI
+- Interactive table creation and editing with direct LaTeX output
+- Support for adding/removing rows and columns
+- One-click conversion of tables to LaTeX format
+- Automatic insertion of generated tables into active document
+
 # [0.1.7]
 
 ### Added

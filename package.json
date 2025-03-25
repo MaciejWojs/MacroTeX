@@ -23,7 +23,7 @@
   },
   "//": "START EXTENSION ATTRIBUTES",
   "name": "MacroTeX",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "A VSCode extension to insert LaTeX macros mainly for figures and images with automatic path completion",
   "displayName": "MacroTeX",
   "categories": [
@@ -50,10 +50,33 @@
     "url": "https://github.com/MaciejWojs/MacroTeX"
   },
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "marcotex",
+          "title": "LaTeX Table Generator",
+          "icon": "$(book)"
+        }
+      ]
+    },
+    "views": {
+      "marcotex": [
+        {
+          "id": "marcotex.sidebarView",
+          "name": "LaTeX Table Generator",
+          "icon": "$(book)",
+          "type": "webview"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "marcotex.insetToActiveDocument",
         "title": "Insert in active document"
+      },
+      {
+        "command": "marcotex.showPanel",
+        "title": "Show LaTeX Table Generator Panel"
       }
     ],
     "menus": {
@@ -125,6 +148,7 @@
     "vscode": "^1.90.0"
   },
   "activationEvents": [
+    "onView:sidebarView",
     "onStartupFinished"
   ]
 }
