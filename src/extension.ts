@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
 import { TableGeneratorBarProvider } from "./TableGeneratorBarProvider";
+import { csvAsTableCommand } from "./commands/csvToTable";
 /**
  * Searches the current workspace for all .tex files and returns a list of file paths that are likely
  * to be main LaTeX files (i.e., files containing a '\documentclass' declaration).
@@ -46,7 +47,7 @@ export async function findAllMainLaTeXFiles(): Promise<string[]> {
  * @param mainLaTeXFiles - An optional array of paths to main LaTeX files.
  * @returns The path of the closest main LaTeX file, or null if no suitable file is found.
  */
-async function findClosestMainLaTeXFile(fsPath?: string, mainLaTeXFiles?: string[]) {
+export async function findClosestMainLaTeXFile(fsPath?: string, mainLaTeXFiles?: string[]) {
   const activeFile = (!fsPath) ? vscode.window.activeTextEditor?.document.uri.fsPath : fsPath;
   if (!activeFile) return null;
 
@@ -663,6 +664,7 @@ export const activate = async (context: vscode.ExtensionContext) => {
 
 
   // context.subscriptions.push(onDidDeleteFiles, onDidRenameFiles, registerHoverProvider, registerCompletionItemProvider);
+  vscode.commands.registerCommand("marcotex.insertCsvAsTable", csvAsTableCommand);
   context.subscriptions.push(onDidDeleteFiles, onDidRenameFiles, registerHoverProvider, registerCompletionItemProvider);
 };
 

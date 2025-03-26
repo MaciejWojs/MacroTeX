@@ -11,6 +11,7 @@ MacroTeX is a VSCode extension that helps with inserting macros in LaTeX documen
     - [Image Preview](#image-preview)
     - [Bulk Image Insertion](#bulk-image-insertion)
     - [Table Generator Sidebar](#table-generator-sidebar)
+    - [CSV to LaTeX Table Conversion](#csv-to-latex-table-conversion)
   - [Configuration](#configuration)
     - [Path Management](#path-management)
     - [Custom Macros](#custom-macros)
@@ -38,6 +39,9 @@ MacroTeX is a VSCode extension that helps with inserting macros in LaTeX documen
 9. Table Generator Sidebar:
    - Visual creation of LaTeX tables
    - Direct insertion into documents
+10. CSV to LaTeX Table Conversion:
+    - Convert CSV files directly to LaTeX tables
+    - Automatic insertion into your document
 
 ## Getting Started
 
@@ -84,6 +88,17 @@ Example usage:
    - Preview the table structure
 3. Click "Convert to LaTeX" to add the LaTeX table code to your active document
 4. The table will be inserted at the current cursor position with proper LaTeX formatting
+
+### CSV to LaTeX Table Conversion
+
+1. Select a CSV file in the VSCode explorer
+2. Right-click and select "Insert CSV as table"
+3. The extension will:
+   - Convert the CSV data to a properly formatted LaTeX table
+   - Insert the table at the current cursor position in the active editor
+   - Maintain the structure and data from your CSV file
+
+Use this feature to quickly import data tables from CSV files into your LaTeX documents without manual formatting.
 
 ## Configuration
 

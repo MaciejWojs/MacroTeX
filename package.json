@@ -2,11 +2,12 @@
   "main": "./dist/extension.cjs",
   "module": "index.ts",
   "dependencies": {
-    "@types/vscode": "^1.98.0"
+    "@types/vscode": "^1.98.0",
+    "csv-parser": "^3.2.0"
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "@vscode/vsce": "^3.3.0",
+    "@vscode/vsce": "^3.3.1",
     "esbuild": "^0.24.2"
   },
   "peerDependencies": {
@@ -23,7 +24,7 @@
   },
   "//": "START EXTENSION ATTRIBUTES",
   "name": "MacroTeX",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "A VSCode extension to insert LaTeX macros mainly for figures and images with automatic path completion",
   "displayName": "MacroTeX",
   "categories": [
@@ -77,6 +78,10 @@
       {
         "command": "marcotex.showPanel",
         "title": "Show LaTeX Table Generator Panel"
+      },
+      {
+        "command": "marcotex.insertCsvAsTable",
+        "title": "Insert CSV as table"
       }
     ],
     "menus": {
@@ -84,12 +89,21 @@
         {
           "command": "marcotex.insetToActiveDocument",
           "when": "false"
+        },
+        {
+          "command": "marcotex.insertCsvAsTable",
+          "when": "false"
         }
       ],
       "explorer/context": [
         {
           "command": "marcotex.insetToActiveDocument",
           "when": "resourceFilename",
+          "group": "navigation"
+        },
+        {
+          "command": "marcotex.insertCsvAsTable",
+          "when": "resourceExtname == '.csv'",
           "group": "navigation"
         }
       ]

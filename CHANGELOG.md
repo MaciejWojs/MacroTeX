@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+# [0.1.9]
+
+### Added
+- Added CSV to LaTeX table conversion feature
+- Support for converting CSV files to properly formatted LaTeX tables
+- Right-click context menu for converting CSV files directly to LaTeX tables
+- Automatic insertion of generated tables into active document
+- Special character handling in CSV data when converting to LaTeX format
+
+### Fixed
+- Fixed incorrect backslash escaping in LaTeX table generator output
+
 # [0.1.8]
 
 ### Added

@@ -409,7 +409,7 @@ export class TableGeneratorBarProvider implements vscode.WebviewViewProvider {
           .replace(/\\^/g, '\\\\textasciicircum{}');
         rowData.push('\t' + cellContent);
         }
-        latexCode += rowData.join(' & ') + ' \\\\\\\\\\n\t\\\\hline\\n';
+        latexCode += rowData.join(' & ') + ' \\\\\\\\\\\\\\n\t\\\\hline\\n';
         }
   
         latexCode += '  \\\\end{tabular}\\n';
