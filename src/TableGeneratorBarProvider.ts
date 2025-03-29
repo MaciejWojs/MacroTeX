@@ -97,6 +97,7 @@ export class TableGeneratorBarProvider implements vscode.WebviewViewProvider {
         background-color: var(--vscode-editor-background);
         box-shadow: var(--box-shadow);
         border: 1px solid var(--vscode-panel-border);
+        transition: var(--transition);
         }
         
         /* Table styles */
@@ -215,6 +216,9 @@ export class TableGeneratorBarProvider implements vscode.WebviewViewProvider {
         font-family: 'Courier New', Courier, monospace;
         border: 1px solid var(--vscode-panel-border);
         text-align: left;
+        font-size: 12px;
+        line-height: 1.4;
+        margin-top: 10px;
         }
         
         /* Header */
@@ -245,11 +249,48 @@ export class TableGeneratorBarProvider implements vscode.WebviewViewProvider {
         flex: 1;
         }
         }
+
+        /* Dodanie stylów dla selektora typów tabel */
+        .table-type-selector {
+          margin: 0 auto 12px auto;
+          padding: 8px;
+          width: 100%;
+          max-width: 300px;
+          border-radius: var(--border-radius);
+          border: 1px solid var(--vscode-panel-border);
+          background-color: var(--vscode-dropdown-background);
+          color: var(--vscode-dropdown-foreground);
+          font-size: 14px;
+        }
+
+        .table-type-selector:focus {
+          outline: 2px solid var(--info-color);
+        }
+
+        /* Wyróżnienie nagłówków w tabeli */
+        tr:first-child td {
+          font-weight: bold;
+          background-color: var(--vscode-editor-lineHighlightBackground);
+        }
+
+        td[contenteditable="true"] {
+          transition: background-color 0.2s;
+        }
         </style>
       </head>
       <body>
         <div class="header">
         <h2>LaTeX Table Generator</h2>
+        </div>
+        
+        <!-- Dodanie selektora środowiska tabeli -->
+        <div class="buttons-container" style="margin-bottom: 8px;">
+          <select id="tableTypeSelector" class="table-type-selector" title="Choose LaTeX table type">
+            <option value="table">table (default)</option>
+            <option value="longtable">longtable (multi-page tables)</option>
+            <option value="tabularx">tabularx (automatic column width)</option>
+            <option value="tabulary">tabulary (automatic content fitting)</option>
+          </select>
         </div>
         
         <div class="buttons-container">
@@ -307,7 +348,7 @@ export class TableGeneratorBarProvider implements vscode.WebviewViewProvider {
         event.preventDefault();
         const pastedText = (event.clipboardData || window.clipboardData).getData('text');
         const cleanText = pastedText.replace(/\\r\\n|\\r|\\n/g, ' ');
-        document.execCommand('insertText', false, cleanText);
+        cell.innerHTML = cleanText;
         });
         cell.addEventListener('focus', () => {
         cell.style.backgroundColor = 'var(--vscode-editor-selectionBackground)';
@@ -382,49 +423,110 @@ export class TableGeneratorBarProvider implements vscode.WebviewViewProvider {
         }
   
         function convertToLatex() {
-        const rowCount = table.rows.length;
-        const colCount = table.rows[0].cells.length;
-        const columnAlignment = 'c'.repeat(colCount);
+          const rowCount = table.rows.length;
+          const colCount = table.rows[0].cells.length;
+          const tableType = document.getElementById("tableTypeSelector").value;
+          let columnAlignment = '';
+          let latexCode = '';
+          
+          // Generowanie ustawienia kolumn w zależności od typu tabeli
+          if (tableType === 'tabularx') {
+            columnAlignment = 'X'.repeat(colCount);
+          } else if (tableType === 'tabulary') {
+            columnAlignment = 'C'.repeat(colCount); // 'C' dla wyśrodkowania w tabulary
+          } else {
+            columnAlignment = 'c'.repeat(colCount); // standardowe wyśrodkowanie dla innych tabel
+          }
+          
+          // Początek definicji tabeli w zależności od typu
+          switch (tableType) {
+            case 'table':
+              latexCode = '\\\\begin{table}[htbp]\\n';
+              latexCode += '  \\\\centering\\n';
+              latexCode += '  \\\\begin{tabular}{|' + columnAlignment.split('').join('|') + '|}\\n';
+              break;
+            case 'longtable':
+              latexCode = '% Wymaga: \\\\usepackage{longtable}\\n';
+              latexCode += '\\\\begin{longtable}{|' + columnAlignment.split('').join('|') + '|}\\n';
+              break;
+            case 'tabularx':
+              latexCode = '% Wymaga: \\\\usepackage{tabularx}\\n';
+              latexCode += '\\\\begin{table}[htbp]\\n';
+              latexCode += '  \\\\centering\\n';
+              latexCode += '  \\\\begin{tabularx}{\\\\textwidth}{|' + columnAlignment.split('').join('|') + '|}\\n';
+              break;
+            case 'tabulary':
+              latexCode = '% Wymaga: \\\\usepackage{tabulary}\\n';
+              latexCode += '\\\\begin{table}[htbp]\\n';
+              latexCode += '  \\\\centering\\n';
+              latexCode += '  \\\\begin{tabulary}{\\\\textwidth}{|' + columnAlignment.split('').join('|') + '|}\\n';
+              break;
+          }
+          
+          // Linia pozioma na górze tabeli
+          latexCode += '  \\\\hline\\n';
+          
+          // Generowanie zawartości tabeli
+          for (let i = 0; i < rowCount; i++) {
+            const row = table.rows[i];
+            const rowData = [];
+            
+            for (let j = 0; j < colCount; j++) {
+              const cellContent = row.cells[j].textContent
+                .replace(/\\r\\n|\\r|\\n/g, ' ')
+                .replace(/\\\\/g, '\\\\textbackslash{ }')
+                .replace(/&/g, '\\\\&')
+                .replace(/%/g, '\\\\%')
+                .replace(/\\$/g, '\\\\\\\\$')
+                .replace(/#/g, '\\\\#')
+                .replace(/_/g, '\\\\_')
+                .replace(/\\{/g, '\\\\{')
+                .replace(/\\}/g, '\\\\}')
+                .replace(/~/g, '\\\\textasciitilde{}')
+                .replace(/\\^/g, '\\\\textasciicircum{}');
+              rowData.push('    ' + cellContent);
+            }
+            
+            // Poprawione generowanie zakończenia wiersza
+            latexCode += rowData.join(' & ') + ' \\\\\\\\\\\\\\\ \\n';
+          }
+          latexCode += '  \\\\hline\\n';
+
+          // Zakończenie definicji tabeli w zależności od typu
+          switch (tableType) {
+            case 'table':
+              latexCode += '  \\\\end{tabular}\\n';
+              latexCode += '  \\\\caption{${1}}\\n';
+              latexCode += '  \\\\label{tab:${2}}\\n';
+              latexCode += '\\\\end{table}';
+              break;
+            case 'longtable':
+              latexCode += '  \\\\caption{${1}}\\n';
+              latexCode += '  \\\\label{tab:${2}}\\n';
+              latexCode += '\\\\end{longtable}';
+              break;
+            case 'tabularx':
+              latexCode += '  \\\\end{tabularx}\\n';
+              latexCode += '  \\\\caption{${1}}\\n';
+              latexCode += '  \\\\label{tab:${2}}\\n';
+              latexCode += '\\\\end{table}';
+              break;
+            case 'tabulary':
+              latexCode += '  \\\\end{tabulary}\\n';
+              latexCode += '  \\\\caption{${1}}\\n';
+              latexCode += '  \\\\label{tab:${2}}\\n';
+              latexCode += '\\\\end{table}';
+              break;
+          }
   
-        let latexCode = '\\\\begin{table}[htbp]\\n';
-        latexCode += '  \\\\centering\\n';
-        latexCode += '  \\\\begin{tabular}{| ' + columnAlignment.split('').join('|') + '|}\\n';
-        latexCode += '\t\\\\hline\\n';
+          // Update the view with the LaTeX code
+          document.querySelector('.table-container').innerHTML = '<pre>' + latexCode + '</pre>';
   
-        for (let i = 0; i < rowCount; i++) {
-        const row = table.rows[i];
-        const rowData = [];
-        for (let j = 0; j < colCount; j++) {
-        const cellContent = row.cells[j].textContent
-          .replace(/\\r\\n|\\r|\\n/g, ' ')
-          .replace(/\\\\/g, '\\\\textbackslash{ }')
-          .replace(/&/g, '\\\\&')
-          .replace(/%/g, '\\\\%')
-          .replace(/\\$/g, '\\\\$')
-          .replace(/#/g, '\\\\#')
-          .replace(/_/g, '\\\\_')
-          .replace(/\\{/g, '\\\\{')
-          .replace(/\\}/g, '\\\\}')
-          .replace(/~/g, '\\\\textasciitilde{}')
-          .replace(/\\^/g, '\\\\textasciicircum{}');
-        rowData.push('\t' + cellContent);
-        }
-        latexCode += rowData.join(' & ') + ' \\\\\\\\\\\\\\n\t\\\\hline\\n';
-        }
-  
-        latexCode += '  \\\\end{tabular}\\n';
-        latexCode += '  \\\\caption{${1}}\\n';
-        latexCode += '  \\\\label{tab:${2}}\\n';
-        latexCode += '\\\\end{table}';
-  
-        // Update the view with the LaTeX code
-        document.querySelector('.table-container').innerHTML = '<pre>' + latexCode + '</pre>';
-  
-        // Send the message to VS Code extension
-        vscode.postMessage({
-        command: 'insertTable',
-        macro: latexCode
-        });
+          // Send the message to VS Code extension
+          vscode.postMessage({
+            command: 'insertTable',
+            macro: latexCode
+          });
         }
         </script>
       </body>

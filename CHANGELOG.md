@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+# [0.2.0]
+
+### Added
+- Enhanced LaTeX Table Generator with support for different table environments
+- Added selection for multiple LaTeX table types: table, longtable, tabularx, and tabulary
+- Improved special character escaping for LaTeX compatibility
+- Enhanced table styling and user interface elements
+
+### Changed
+- Refactored LaTeX table generation algorithm for better output
+- Improved table editor interface with visual feedback
+- Enhanced content validation and input handling in editable cells
+
 # [0.1.9]
 
 ### Added
