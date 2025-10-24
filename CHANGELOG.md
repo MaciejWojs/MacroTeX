@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+# [0.2.1]
+
+### Added
+- Live LaTeX preview in Table Generator - preview updates automatically as you edit the table
+- Real-time table editing feedback with instant LaTeX code generation
+- Enhanced table reconstruction system for better column/row management
+
+### Changed
+- Converted "Convert to LaTeX" button to "Insert LaTeX Table" - now only inserts code instead of replacing preview
+- Improved table manipulation reliability - fixed issues with adding/removing columns
+- Enhanced table rebuild mechanism using data-driven approach instead of DOM manipulation
+- Better event handling for live preview updates on all table changes
+- Migrated Table Generator UI to use @vscode-elements web components for better VS Code integration and consistency
+- Replaced custom HTML table elements with vscode-table, vscode-button, vscode-checkbox, and vscode-single-select components
+- Improved visual consistency with VS Code's native UI components and theming
+
 # [0.2.0]
 
 ### Added
