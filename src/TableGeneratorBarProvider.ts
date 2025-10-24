@@ -1,5 +1,8 @@
 import * as vscode from "vscode";
 import * as path from 'path';
+import * as fs from 'fs';
+
+const IS_LOGGING_ENABLED = false;
 
 export class TableGeneratorBarProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'marcotex.sidebarView';
@@ -16,34 +19,68 @@ export class TableGeneratorBarProvider implements vscode.WebviewViewProvider {
       localResourceRoots: [
         vscode.Uri.file(path.join(this.extensionUri.fsPath, 'node_modules', '@vscode-elements')),
         vscode.Uri.file(path.join(this.extensionUri.fsPath, 'node_modules', '@vscode')),
-        vscode.Uri.file(path.join(this.extensionUri.fsPath, 'media')),
         this.extensionUri
       ]
     };
 
-    // Get paths to resources
-    const elementsPath = webviewView.webview.asWebviewUri(
-      vscode.Uri.file(path.join(this.extensionUri.fsPath, 'node_modules', '@vscode-elements', 'elements', 'dist'))
-    );
-    
-    const codiconsPath = webviewView.webview.asWebviewUri(
-      vscode.Uri.file(path.join(this.extensionUri.fsPath, 'node_modules', '@vscode', 'codicons', 'dist'))
-    );
+    const channel = vscode.window.createOutputChannel("Table Generator");
 
-    console.log("Extension URI:", this.extensionUri.fsPath);
-    console.log("Elements Path:", elementsPath.toString());
-    console.log("Codicons Path:", codiconsPath.toString());
+    // Get paths to resources with fallback logic
+    const elementsMainPath = path.join(this.extensionUri.fsPath, 'node_modules', '@vscode-elements', 'elements', 'dist', 'bundled.js');
+    const elementsFallbackPath = path.join(this.extensionUri.fsPath, 'dist', 'toolkit.js');
+
+
+    if (IS_LOGGING_ENABLED) {
+      channel.appendLine("Retrieving Elements Path...");
+      channel.appendLine(`Checking main path: ${elementsMainPath}`);
+      channel.appendLine(`Main path exists: ${fs.existsSync(elementsMainPath)}`);
+      channel.appendLine(`Checking fallback path: ${elementsFallbackPath}`);
+      channel.appendLine(`Fallback path exists: ${fs.existsSync(elementsFallbackPath)}`);
+    }
+
+
+    const useMainPath = fs.existsSync(elementsMainPath);
+    if (IS_LOGGING_ENABLED) channel.append(`Use Main Path: ${useMainPath}`);
+    const elementsPath = useMainPath
+      ? webviewView.webview.asWebviewUri(vscode.Uri.file(path.dirname(elementsMainPath)))
+      : webviewView.webview.asWebviewUri(vscode.Uri.file(path.dirname(elementsFallbackPath)));
+
+
+    const elementsScript = useMainPath ? 'bundled.js' : 'toolkit.js';
+
+    const codiconsMainPath = path.join(this.extensionUri.fsPath, 'node_modules', '@vscode', 'codicons', 'dist');
+    const codiconsFallbackPath = path.join(this.extensionUri.fsPath, 'media');
+
+    const codiconsPath = fs.existsSync(codiconsMainPath)
+      ? webviewView.webview.asWebviewUri(vscode.Uri.file(codiconsMainPath))
+      : webviewView.webview.asWebviewUri(vscode.Uri.file(codiconsFallbackPath));
+
+    if (IS_LOGGING_ENABLED) {
+
+      channel.appendLine("Table Generator Webview Initialized");
+
+      console.log("Extension URI:", this.extensionUri.fsPath);
+      console.log("Elements Path:", elementsPath.toString());
+      console.log("Elements Script:", elementsScript);
+      console.log("Codicons Path:", codiconsPath.toString());
+
+      channel.appendLine(`Extension URI: ${this.extensionUri.fsPath}`);
+      channel.appendLine(`Elements Path: ${elementsPath.toString()}`);
+      channel.appendLine(`Elements Script: ${elementsScript}`);
+      channel.appendLine(`Codicons Path: ${codiconsPath.toString()}`);
+      channel.show(true);
+    }
 
     webviewView.webview.html = /* html */`
-<!DOCTYPE html>
-<html lang="en">
+      <!DOCTYPE html>
+      <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LaTeX Table Generator</title>
   
   <!-- Load VS Code Elements -->
-  <script type="module" src="${elementsPath}/bundled.js"></script>
+  <script type="module" src="${elementsPath}/${elementsScript}"></script>
   
   <style>
     :root {

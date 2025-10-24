@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 # [0.2.1]
 
+### Fixed
+- Resolved issue with UI components not loading correctly in Table Generator webview
+- Fixed fallback resource loading mechanism for @vscode-elements components
+- Improved path resolution for bundled.js and toolkit.js fallback scripts
+- Enhanced debugging output for webview resource loading (can be enabled via IS_LOGGING_ENABLED flag)
+
+# [0.2.1]
+
 ### Added
 - Live LaTeX preview in Table Generator - preview updates automatically as you edit the table
 - Real-time table editing feedback with instant LaTeX code generation

@@ -17,6 +17,7 @@ const config: BuildOptions = {
     ".js": "js",
   },
   logLevel: "info",
+  minify: true,
 };
 
 export default config;
