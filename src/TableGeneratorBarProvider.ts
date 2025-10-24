@@ -114,37 +114,7 @@ export class TableGeneratorBarProvider implements vscode.WebviewViewProvider {
       border: 1px solid var(--vscode-panel-border);
       transition: var(--transition);
     }
-    
-    table {
-      border-collapse: collapse;
-      width: 100%;
-      margin: 0 auto;
-      background-color: var(--vscode-editor-background);
-    }
-    
-    th, td {
-      border: 1px solid var(--vscode-panel-border);
-      padding: 10px 12px;
-      text-align: center;
-      font-size: 14px;
-      transition: var(--transition);
-    }
-    
-    th {
-      background-color: var(--vscode-badge-background);
-      color: var(--vscode-badge-foreground);
-      font-weight: 600;
-    }
-    
-    td[contenteditable="true"]:focus {
-      outline: 2px solid var(--vscode-focusBorder);
-      background-color: var(--vscode-input-background) !important;
-    }
-    
-    tr:hover td {
-      background-color: var(--vscode-list-hoverBackground);
-    }
-    
+
     .controls-container {
       display: flex;
       flex-wrap: wrap;
@@ -160,7 +130,7 @@ export class TableGeneratorBarProvider implements vscode.WebviewViewProvider {
       gap: 8px;
       flex-wrap: wrap;
     }
-    
+
     pre {
       background-color: var(--vscode-editor-background);
       padding: 15px;
@@ -174,7 +144,7 @@ export class TableGeneratorBarProvider implements vscode.WebviewViewProvider {
       line-height: 1.4;
       margin-top: 10px;
     }
-    
+
     .header {
       margin: 0 auto 15px auto;
       padding-bottom: 10px;
@@ -199,18 +169,34 @@ export class TableGeneratorBarProvider implements vscode.WebviewViewProvider {
       }
     }
 
-    tr:first-child td {
-      font-weight: bold;
-      background-color: var(--vscode-editor-lineHighlightBackground);
-    }
-
-    td[contenteditable="true"] {
-      transition: background-color 0.2s;
-    }
-
     .icon {
       font-size: 14px;
       margin-right: 4px;
+    }
+
+    vscode-table {
+      width: 100%;
+      display: block;
+    }
+
+    vscode-table-cell[contenteditable="true"]:focus,
+    vscode-table-header-cell[contenteditable="true"]:focus {
+      background-color: var(--vscode-editor-selectionBackground) !important;
+      outline: 1px solid var(--vscode-focusBorder);
+    }
+
+    .settings-container {
+      display: flex;
+      justify-content: center;
+      margin: 10px 0;
+    }
+
+    /* Force table to recalculate layout */
+    .table-refresh {
+      display: none;
+    }
+    .table-refresh.show {
+      display: block;
     }
   </style>
 </head>
@@ -248,37 +234,57 @@ export class TableGeneratorBarProvider implements vscode.WebviewViewProvider {
       </vscode-button>
     </div>
   </div>
+
+  <div class="settings-container">
+    <vscode-checkbox id="boldHeadersCheckbox" label="Bold headers" checked></vscode-checkbox>
+  </div>
   
   <div class="tooltip" style="text-align: center;">
     <vscode-button id="convertBtn" appearance="primary">
-      <span class="icon">📋</span>Convert to LaTeX
+      <span class="icon">📋</span>Insert LaTeX Table
     </vscode-button>
-    <span class="tooltiptext">Create and insert a LaTeX table into your document</span>
+    <span class="tooltiptext">Insert the LaTeX table into your document</span>
   </div>
   
   <div id="table-container" class="table-container">
-    <table id="myTable">
-      <tr>
-        <td>Sample text</td>
-        <td>Sample text</td>
-        <td>Sample text</td>
-      </tr>
-      <tr>
-        <td>Sample text</td>
-        <td>Sample text</td>
-        <td>Sample text</td>
-      </tr>
-      <tr>
-        <td>Sample text</td>
-        <td>Sample text</td>
-        <td>Sample text</td>
-      </tr>
-    </table>
+    <vscode-table id="myTable" zebra bordered-rows resizable>
+      <vscode-table-header slot="header">
+        <vscode-table-header-cell>Column 1</vscode-table-header-cell>
+        <vscode-table-header-cell>Column 2</vscode-table-header-cell>
+        <vscode-table-header-cell>Column 3</vscode-table-header-cell>
+      </vscode-table-header>
+      <vscode-table-body slot="body">
+        <vscode-table-row>
+          <vscode-table-cell>Sample text</vscode-table-cell>
+          <vscode-table-cell>Sample text</vscode-table-cell>
+          <vscode-table-cell>Sample text</vscode-table-cell>
+        </vscode-table-row>
+        <vscode-table-row>
+          <vscode-table-cell>Sample text</vscode-table-cell>
+          <vscode-table-cell>Sample text</vscode-table-cell>
+          <vscode-table-cell>Sample text</vscode-table-cell>
+        </vscode-table-row>
+        <vscode-table-row>
+          <vscode-table-cell>Sample text</vscode-table-cell>
+          <vscode-table-cell>Sample text</vscode-table-cell>
+          <vscode-table-cell>Sample text</vscode-table-cell>
+        </vscode-table-row>
+      </vscode-table-body>
+    </vscode-table>
+  </div>
+
+  <div class="header" style="margin-top: 20px;">
+    <h3>LaTeX Preview</h3>
+  </div>
+  
+  <div id="latex-preview" class="table-container">
+    <pre id="latexCode"></pre>
   </div>
 
   <script type="module">
     const vscode = acquireVsCodeApi();
     let table = document.getElementById("myTable");
+    let currentLatexCode = '';
 
     document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('addRowBtn').addEventListener('click', addRow);
@@ -286,192 +292,377 @@ export class TableGeneratorBarProvider implements vscode.WebviewViewProvider {
       document.getElementById('removeRowBtn').addEventListener('click', removeRow);
       document.getElementById('removeColumnBtn').addEventListener('click', removeColumn);
       document.getElementById('resetBtn').addEventListener('click', resetTable);
-      document.getElementById('convertBtn').addEventListener('click', convertToLatex);
+      document.getElementById('convertBtn').addEventListener('click', insertLatexTable);
+
+      // Add listeners for live preview updates
+      document.getElementById('tableTypeSelector').addEventListener('change', updateLatexPreview);
+      document.getElementById('boldHeadersCheckbox').addEventListener('change', updateLatexPreview);
+
+      initializeTable();
     });
 
-    function addEditableFeature(cell) {
+    function updateTableReference() {
+      table = document.getElementById("myTable");
+      console.log('Table reference updated:', table);
+    }
+
+    function initializeTable() {
+      updateTableReference();
+      document.querySelectorAll('vscode-table-cell').forEach(cell => makeCellEditable(cell));
+      document.querySelectorAll('vscode-table-header-cell').forEach(cell => makeHeaderCellEditable(cell));
+      updateLatexPreview();
+    }
+
+    function getTableData() {
+      const header = table.querySelector('vscode-table-header');
+      const body = table.querySelector('vscode-table-body');
+      
+      const headerData = [];
+      header.querySelectorAll('vscode-table-header-cell').forEach(cell => {
+        headerData.push(cell.textContent.trim());
+      });
+      
+      const bodyData = [];
+      body.querySelectorAll('vscode-table-row').forEach(row => {
+        const rowData = [];
+        row.querySelectorAll('vscode-table-cell').forEach(cell => {
+          rowData.push(cell.textContent.trim());
+        });
+        bodyData.push(rowData);
+      });
+      
+      return { headers: headerData, rows: bodyData };
+    }
+
+    function rebuildTable(headers, rows) {
+      const container = document.querySelector('.table-container');
+      
+      let headerHTML = '';
+      headers.forEach(header => {
+        headerHTML += \`<vscode-table-header-cell>\${header}</vscode-table-header-cell>\`;
+      });
+      
+      let bodyHTML = '';
+      rows.forEach(row => {
+        bodyHTML += '<vscode-table-row>';
+        row.forEach(cell => {
+          bodyHTML += \`<vscode-table-cell>\${cell}</vscode-table-cell>\`;
+        });
+        bodyHTML += '</vscode-table-row>';
+      });
+      
+      container.innerHTML = \`
+        <vscode-table id="myTable" zebra bordered-rows resizable>
+          <vscode-table-header slot="header">
+            \${headerHTML}
+          </vscode-table-header>
+          <vscode-table-body slot="body">
+            \${bodyHTML}
+          </vscode-table-body>
+        </vscode-table>
+      \`;
+      
+      // Reinitialize after rebuild
+      setTimeout(() => {
+        initializeTable();
+        console.log('Table rebuilt and reinitialized');
+      }, 100);
+    }
+
+    function makeCellEditable(cell) {
       cell.setAttribute('contenteditable', true);
+
       cell.addEventListener('keydown', event => {
         if (event.key === 'Enter') {
           event.preventDefault();
-          return false;
+          cell.blur();
         }
       });
+
       cell.addEventListener('paste', event => {
         event.preventDefault();
         const pastedText = (event.clipboardData || window.clipboardData).getData('text');
-        const cleanText = pastedText.replace(/\\r\\n|\\r|\\n/g, ' ');
-        cell.innerHTML = cleanText;
+        cell.textContent = pastedText.replace(/\\r\\n|\\r|\\n/g, ' ');
+        updateLatexPreview();
       });
+
       cell.addEventListener('focus', () => {
         cell.style.backgroundColor = 'var(--vscode-editor-selectionBackground)';
       });
+
       cell.addEventListener('blur', () => {
         cell.style.backgroundColor = '';
         cell.textContent = cell.textContent.replace(/\\r\\n|\\r|\\n/g, ' ');
+        updateLatexPreview();
+      });
+
+      cell.addEventListener('input', () => {
+        updateLatexPreview();
       });
     }
 
-    document.querySelectorAll('td').forEach(cell => {
-      addEditableFeature(cell);
-    });
+    function makeHeaderCellEditable(cell) {
+      cell.setAttribute('contenteditable', true);
+
+      cell.addEventListener('keydown', event => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          cell.blur();
+        }
+      });
+
+      cell.addEventListener('paste', event => {
+        event.preventDefault();
+        const pastedText = (event.clipboardData || window.clipboardData).getData('text');
+        cell.textContent = pastedText.replace(/\\r\\n|\\r|\\n/g, ' ');
+        updateLatexPreview();
+      });
+
+      cell.addEventListener('focus', () => {
+        cell.style.backgroundColor = 'var(--vscode-editor-selectionBackground)';
+      });
+
+      cell.addEventListener('blur', () => {
+        cell.style.backgroundColor = '';
+        cell.textContent = cell.textContent.replace(/\\r\\n|\\r|\\n/g, ' ');
+        updateLatexPreview();
+      });
+
+      cell.addEventListener('input', () => {
+        updateLatexPreview();
+      });
+    }
 
     function addRow() {
-      const rowCount = table.rows.length;
-      const colCount = table.rows[0].cells.length;
-      const newRow = table.insertRow(rowCount);
-      for (let i = 0; i < colCount; i++) {
-        const newCell = newRow.insertCell(i);
-        newCell.textContent = "Sample text";
-        addEditableFeature(newCell);
+      try {
+        updateTableReference();
+        const tableData = getTableData();
+        
+        // Add new row with empty cells
+        const newRow = new Array(tableData.headers.length).fill('Sample text');
+        tableData.rows.push(newRow);
+        
+        rebuildTable(tableData.headers, tableData.rows);
+        
+      } catch (error) {
+        console.error('Error adding row:', error);
       }
     }
 
     function addColumn() {
-      const rowCount = table.rows.length;
-      for (let i = 0; i < rowCount; i++) {
-        const newCell = table.rows[i].insertCell();
-        newCell.textContent = "Sample text";
-        addEditableFeature(newCell);
+      try {
+        updateTableReference();
+        const tableData = getTableData();
+        
+        // Add new header
+        const newColumnNumber = tableData.headers.length + 1;
+        tableData.headers.push(\`Column \${newColumnNumber}\`);
+        
+        // Add new cell to each row
+        tableData.rows.forEach(row => {
+          row.push('Sample text');
+        });
+        
+        rebuildTable(tableData.headers, tableData.rows);
+        console.log('Column added and table rebuilt');
+        
+      } catch (error) {
+        console.error('Error adding column:', error);
       }
     }
 
     function removeRow() {
-      if (table.rows.length > 1) {
-        table.deleteRow(table.rows.length - 1);
+      try {
+        updateTableReference();
+        const tableData = getTableData();
+        
+        if (tableData.rows.length <= 1) {
+          console.log('Cannot remove row - minimum rows reached');
+          return;
+        }
+        
+        // Remove last row
+        tableData.rows.pop();
+        
+        rebuildTable(tableData.headers, tableData.rows);
+        
+      } catch (error) {
+        console.error('Error removing row:', error);
       }
     }
 
     function removeColumn() {
-      if (table.rows[0].cells.length > 1) {
-        for (let i = 0; i < table.rows.length; i++) {
-          table.rows[i].deleteCell(table.rows[i].cells.length - 1);
+      try {
+        updateTableReference();
+        const tableData = getTableData();
+        
+        if (tableData.headers.length <= 1) {
+          console.log('Cannot remove column - minimum columns reached');
+          return;
         }
+        
+        // Remove last header
+        tableData.headers.pop();
+        
+        // Remove last cell from each row
+        tableData.rows.forEach(row => {
+          row.pop();
+        });
+        
+        rebuildTable(tableData.headers, tableData.rows);
+        console.log('Column removed and table rebuilt');
+        
+      } catch (error) {
+        console.error('Error removing column:', error);
       }
     }
 
     function resetTable() {
-      document.querySelector('.table-container').innerHTML = \`
-        <table id="myTable">
-          <tr>
-            <td>Sample text</td>
-            <td>Sample text</td>
-            <td>Sample text</td>
-          </tr>
-          <tr>
-            <td>Sample text</td>
-            <td>Sample text</td>
-            <td>Sample text</td>
-          </tr>
-          <tr>
-            <td>Sample text</td>
-            <td>Sample text</td>
-            <td>Sample text</td>
-          </tr>
-        </table>\`;
-      table = document.getElementById("myTable");
-      document.querySelectorAll('#myTable td').forEach(cell => {
-        addEditableFeature(cell);
-      });
+      try {
+        const defaultHeaders = ['Column 1', 'Column 2', 'Column 3'];
+        const defaultRows = [
+          ['Sample text', 'Sample text', 'Sample text'],
+          ['Sample text', 'Sample text', 'Sample text'],
+          ['Sample text', 'Sample text', 'Sample text']
+        ];
+        
+        rebuildTable(defaultHeaders, defaultRows);
+        console.log('Table reset');
+        
+      } catch (error) {
+        console.error('Error resetting table:', error);
+      }
     }
 
-    function convertToLatex() {
-      const rowCount = table.rows.length;
-      const colCount = table.rows[0].cells.length;
-      const tableType = document.getElementById("tableTypeSelector").value;
-      let columnAlignment = '';
-      let latexCode = '';
-      
-      if (tableType === 'tabularx') {
-        columnAlignment = 'X'.repeat(colCount);
-      } else if (tableType === 'tabulary') {
-        columnAlignment = 'C'.repeat(colCount);
-      } else {
-        columnAlignment = 'c'.repeat(colCount);
-      }
-      
-      switch (tableType) {
-        case 'table':
-          latexCode = '\\\\begin{table}[htbp]\\n';
-          latexCode += '  \\\\centering\\n';
-          latexCode += '  \\\\begin{tabular}{|' + columnAlignment.split('').join('|') + '|}\\n';
-          break;
-        case 'longtable':
-          latexCode = '% Wymaga: \\\\usepackage{longtable}\\n';
-          latexCode += '\\\\begin{longtable}{|' + columnAlignment.split('').join('|') + '|}\\n';
-          break;
-        case 'tabularx':
-          latexCode = '% Wymaga: \\\\usepackage{tabularx}\\n';
-          latexCode += '\\\\begin{table}[htbp]\\n';
-          latexCode += '  \\\\centering\\n';
-          latexCode += '  \\\\begin{tabularx}{\\\\textwidth}{|' + columnAlignment.split('').join('|') + '|}\\n';
-          break;
-        case 'tabulary':
-          latexCode = '% Wymaga: \\\\usepackage{tabulary}\\n';
-          latexCode += '\\\\begin{table}[htbp]\\n';
-          latexCode += '  \\\\centering\\n';
-          latexCode += '  \\\\begin{tabulary}{\\\\textwidth}{|' + columnAlignment.split('').join('|') + '|}\\n';
-          break;
-      }
-      
-      latexCode += '  \\\\hline\\n';
-      
-      for (let i = 0; i < rowCount; i++) {
-        const row = table.rows[i];
-        const rowData = [];
-        
-        for (let j = 0; j < colCount; j++) {
-          const cellContent = row.cells[j].textContent
-            .replace(/\\r\\n|\\r|\\n/g, ' ')
-            .replace(/\\\\/g, '\\\\textbackslash{ }')
-            .replace(/&/g, '\\\\&')
-            .replace(/%/g, '\\\\%')
-            .replace(/\\$/g, '\\\\\\\\$')
-            .replace(/#/g, '\\\\#')
-            .replace(/_/g, '\\\\_')
-            .replace(/\\{/g, '\\\\{')
-            .replace(/\\}/g, '\\\\}')
-            .replace(/~/g, '\\\\textasciitilde{}')
-            .replace(/\\^/g, '\\\\textasciicircum{}');
-          rowData.push('    ' + cellContent);
+    function updateLatexPreview() {
+      setTimeout(() => {
+        try {
+          updateTableReference();
+          const header = table.querySelector('vscode-table-header');
+          const body = table.querySelector('vscode-table-body');
+          
+          if (!header || !body) {
+            console.log('Table not ready for preview update');
+            return;
+          }
+
+          const tableType = document.getElementById("tableTypeSelector").value;
+          const boldHeaders = document.getElementById("boldHeadersCheckbox").checked;
+
+          const colCount = header.children.length;
+          const rowCount = body.children.length;
+
+          let columnAlignment = (tableType === 'tabularx') ? 'X'.repeat(colCount) :
+                                (tableType === 'tabulary') ? 'C'.repeat(colCount) : 'c'.repeat(colCount);
+          let latexCode = '';
+
+          switch (tableType) {
+            case 'table':
+              latexCode = '\\\\begin{table}[htbp]\\n  \\\\centering\\n  \\\\begin{tabular}{|' + columnAlignment.split('').join('|') + '|}\\n';
+              break;
+            case 'longtable':
+              latexCode = '% Wymaga: \\\\usepackage{longtable}\\n\\\\begin{longtable}{|' + columnAlignment.split('').join('|') + '|}\\n';
+              break;
+            case 'tabularx':
+              latexCode = '% Wymaga: \\\\usepackage{tabularx}\\n\\\\begin{table}[htbp]\\n  \\\\centering\\n  \\\\begin{tabularx}{\\\\textwidth}{|' + columnAlignment.split('').join('|') + '|}\\n';
+              break;
+            case 'tabulary':
+              latexCode = '% Wymaga: \\\\usepackage{tabulary}\\n\\\\begin{table}[htbp]\\n  \\\\centering\\n  \\\\begin{tabulary}{\\\\textwidth}{|' + columnAlignment.split('').join('|') + '|}\\n';
+              break;
+          }
+
+          latexCode += '  \\\\hline\\n';
+
+          // Dodaj nagłówki (z opcjonalnym pogrubieniem)
+          const headerData = [];
+          header.querySelectorAll('vscode-table-header-cell').forEach(cell => {
+            let text = cell.textContent
+              .replace(/\\r\\n|\\r|\\n/g, ' ')
+              .replace(/\\\\/g, '\\\\textbackslash{ }')
+              .replace(/&/g, '\\\\&')
+              .replace(/%/g, '\\\\%')
+              .replace(/\\$/g, '\\\\\\\\$')
+              .replace(/#/g, '\\\\#')
+              .replace(/_/g, '\\\\_')
+              .replace(/\\{/g, '\\\\{')
+              .replace(/\\}/g, '\\\\}')
+              .replace(/~/g, '\\\\textasciitilde{}')
+              .replace(/\\^/g, '\\\\textasciicircum{}');
+            
+            if (boldHeaders) {
+              headerData.push(\`    \\\\textbf{\${text}}\`);
+            } else {
+              headerData.push(\`    \${text}\`);
+            }
+          });
+          latexCode += headerData.join(' & ') + ' \\\\\\\\\\\\\\\ \\n';
+          latexCode += '  \\\\hline\\n';
+
+          // Dodaj wiersze danych
+          body.querySelectorAll('vscode-table-row').forEach(row => {
+            const rowData = [];
+            row.querySelectorAll('vscode-table-cell').forEach(cell => {
+              let text = cell.textContent
+                .replace(/\\r\\n|\\r|\\n/g, ' ')
+                .replace(/\\\\/g, '\\\\textbackslash{ }')
+                .replace(/&/g, '\\\\&')
+                .replace(/%/g, '\\\\%')
+                .replace(/\\$/g, '\\\\\\\\$')
+                .replace(/#/g, '\\\\#')
+                .replace(/_/g, '\\\\_')
+                .replace(/\\{/g, '\\\\{')
+                .replace(/\\}/g, '\\\\}')
+                .replace(/~/g, '\\\\textasciitilde{}')
+                .replace(/\\^/g, '\\\\textasciicircum{}');
+              rowData.push('    ' + text);
+            });
+            latexCode += rowData.join(' & ') + ' \\\\\\\\\\\\\\\ \\n';
+          });
+
+          latexCode += '  \\\\hline\\n';
+
+          switch (tableType) {
+            case 'table':
+              latexCode += '  \\\\end{tabular}\\n  \\\\caption{\${1}}\\n  \\\\label{tab:\${2}}\\n\\\\end{table}';
+              break;
+            case 'longtable':
+              latexCode += '  \\\\caption{\${1}}\\n  \\\\label{tab:\${2}}\\n\\\\end{longtable}';
+              break;
+            case 'tabularx':
+              latexCode += '  \\\\end{tabularx}\\n  \\\\caption{\${1}}\\n  \\\\label{tab:\${2}}\\n\\\\end{table}';
+              break;
+            case 'tabulary':
+              latexCode += '  \\\\end{tabulary}\\n  \\\\caption{\${1}}\\n  \\\\label{tab:\${2}}\\n\\\\end{table}';
+              break;
+          }
+
+          // Update preview
+          document.getElementById('latexCode').textContent = latexCode;
+          currentLatexCode = latexCode;
+          
+        } catch (error) {
+          console.error('Error updating LaTeX preview:', error);
         }
-        
-        latexCode += rowData.join(' & ') + ' \\\\\\\\\\\\\\\ \\n';
+      }, 50);
+    }
+
+    function insertLatexTable() {
+      if (!currentLatexCode) {
+        updateLatexPreview();
+        setTimeout(() => {
+          if (currentLatexCode) {
+            vscode.postMessage({
+              command: 'insertTable',
+              macro: currentLatexCode
+            });
+          }
+        }, 100);
+      } else {
+        vscode.postMessage({
+          command: 'insertTable',
+          macro: currentLatexCode
+        });
       }
-      latexCode += '  \\\\hline\\n';
-
-      switch (tableType) {
-        case 'table':
-          latexCode += '  \\\\end{tabular}\\n';
-          latexCode += '  \\\\caption{\${1}}\\n';
-          latexCode += '  \\\\label{tab:\${2}}\\n';
-          latexCode += '\\\\end{table}';
-          break;
-        case 'longtable':
-          latexCode += '  \\\\caption{\${1}}\\n';
-          latexCode += '  \\\\label{tab:\${2}}\\n';
-          latexCode += '\\\\end{longtable}';
-          break;
-        case 'tabularx':
-          latexCode += '  \\\\end{tabularx}\\n';
-          latexCode += '  \\\\caption{\${1}}\\n';
-          latexCode += '  \\\\label{tab:\${2}}\\n';
-          latexCode += '\\\\end{table}';
-          break;
-        case 'tabulary':
-          latexCode += '  \\\\end{tabulary}\\n';
-          latexCode += '  \\\\caption{\${1}}\\n';
-          latexCode += '  \\\\label{tab:\${2}}\\n';
-          latexCode += '\\\\end{table}';
-          break;
-      }
-
-      document.querySelector('.table-container').innerHTML = '<pre>' + latexCode + '</pre>';
-
-      vscode.postMessage({
-        command: 'insertTable',
-        macro: latexCode
-      });
     }
   </script>
 </body>
