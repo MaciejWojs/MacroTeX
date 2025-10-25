@@ -94,6 +94,14 @@
       {
         "command": "marcotex.showMacroFinder",
         "title": "Show Macro Finder"
+      },
+      {
+        "command": "marcotex.expandMacroToDefinition",
+        "title": "Expand Macro to Definition"
+      },
+      {
+        "command": "marcotex.collapseMacroToUsage",
+        "title": "Collapse Definition to Macro Usage"
       }
     ],
     "menus": {
@@ -105,6 +113,26 @@
         {
           "command": "marcotex.insertCsvAsTable",
           "when": "false"
+        },
+        {
+          "command": "marcotex.expandMacroToDefinition",
+          "when": "editorHasSelection && resourceExtname == '.tex'"
+        },
+        {
+          "command": "marcotex.collapseMacroToUsage",
+          "when": "editorHasSelection && resourceExtname == '.tex'"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "marcotex.expandMacroToDefinition",
+          "when": "editorHasSelection && resourceExtname == '.tex'",
+          "group": "1_modification"
+        },
+        {
+          "command": "marcotex.collapseMacroToUsage",
+          "when": "editorHasSelection && resourceExtname == '.tex'",
+          "group": "1_modification"
         }
       ],
       "explorer/context": [
@@ -128,7 +156,7 @@
           "type": "array",
           "default": [
             {
-              "signature": "\\fg{PATH}{}{}",
+              "signature": "\\fg{PATH}{Caption}{Identifier}",
               "extensions": [
                 "png",
                 "jpg"
@@ -168,7 +196,21 @@
           "description": "If enabled (true), suggestions will be based on the folder structure. By default (false), suggestions will provide the full file path."
         }
       }
-    }
+    },
+    "keybindings": [
+      {
+        "command": "marcotex.expandMacroToDefinition",
+        "key": "ctrl+alt+e",
+        "mac": "cmd+alt+e",
+        "when": "editorTextFocus && resourceExtname == '.tex'"
+      },
+      {
+        "command": "marcotex.collapseMacroToUsage",
+        "key": "ctrl+alt+shift+e",
+        "mac": "cmd+alt+shift+e",
+        "when": "editorTextFocus && resourceExtname == '.tex'"
+      }
+    ]
   },
   "engines": {
     "vscode": "^1.90.0"

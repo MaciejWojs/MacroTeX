@@ -1,4 +1,4 @@
-import { MacroDefinition } from './MacroParser';
+import type { MacroDefinition } from './MacroParser';
 
 export interface MacroGroup {
   type: string;

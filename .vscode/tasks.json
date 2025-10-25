@@ -1,23 +1,23 @@
 {
   "version": "2.0.0",
   "tasks": [
-    // {
-    //   "type": "npm",
-    //   "script": "bun run ./scripts/build-with-esbuild.ts",
-    //   "problemMatcher": [],
-    //   "label": "bun: build",
-    //   "detail": "bun run ./scripts/build-with-esbuild.ts - package.json",
-    //   "group": {
-    //     "kind": "build",
-    //     "isDefault": true
-    //   }
-    // },
+    {
+      "type": "shell",
+      "command": "bun run ./scripts/build-with-esbuild.ts",
+      "problemMatcher": [],
+      "label": "bun: build",
+      "detail": "bun run ./scripts/build-with-esbuild.ts - package.json",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
     {
       "type": "npm",
       "script": "build",
       "group": {
         "kind": "build",
-        "isDefault": true
+        // "isDefault": true
       },
       "problemMatcher": [],
       "label": "npm: build",

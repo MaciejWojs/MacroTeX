@@ -4,6 +4,8 @@ import * as path from "path";
 import { TableGeneratorBarProvider } from "./TableGeneratorBarProvider";
 import { csvAsTableCommand } from "./commands/csvToTable";
 import { MacroFinderProvider } from './MacroFinderProvider';
+import { MacroConverter } from './utils/MacroConverter';
+import { MacroParser } from './utils/MacroParser';
 /**
  * Searches the current workspace for all .tex files and returns a list of file paths that are likely
  * to be main LaTeX files (i.e., files containing a '\documentclass' declaration).
@@ -188,8 +190,107 @@ export const activate = async (context: vscode.ExtensionContext) => {
     await vscode.commands.executeCommand('marcotex.macroFinder.focus');
   });
 
+  // Komenda do rozwijania makra na definicję
+  const expandMacroCommand = vscode.commands.registerCommand("marcotex.expandMacroToDefinition", async () => {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      vscode.window.showWarningMessage('No active editor found');
+      return;
+    }
+
+    const selection = editor.selection;
+    if (selection.isEmpty) {
+      vscode.window.showWarningMessage('Please select a macro usage to expand');
+      return;
+    }
+
+    const selectedText = editor.document.getText(selection);
+    const usage = MacroConverter.parseUsageFromSelection(selectedText);
+    
+    if (!usage) {
+      vscode.window.showWarningMessage('Selected text is not a valid macro usage');
+      return;
+    }
+
+    // Sprawdź czy makro jest zdefiniowane w konfiguracji
+    const config = vscode.workspace.getConfiguration('latexMacros');
+    const macrosList = config.get('macrosList', []);
+    
+    const isConfiguredMacro = macrosList.some((macro: any) => {
+      const macroNameMatch = macro.signature.match(/\\(\w+)/);
+      return macroNameMatch && macroNameMatch[1] === usage.name;
+    });
+
+    if (!isConfiguredMacro) {
+      vscode.window.showWarningMessage(`Macro \\${usage.name} is not defined in configuration. Please add it to latexMacros.macrosList setting.`);
+      return;
+    }
+
+    try {
+      // Użyj konfiguracji do wygenerowania definicji
+      const expandedDefinition = await MacroConverter.convertUsageToDefinitionFromConfig(usage);
+      
+      if (!expandedDefinition) {
+        vscode.window.showWarningMessage(`Could not generate definition for macro \\${usage.name}`);
+        return;
+      }
+      
+      // Zastąp zaznaczony tekst rozwiniętą definicją
+      await editor.edit(editBuilder => {
+        editBuilder.replace(selection, expandedDefinition);
+      });
+
+      vscode.window.showInformationMessage(`Expanded macro \\${usage.name} to its definition`);
+    } catch (error) {
+      vscode.window.showErrorMessage(`Error expanding macro: ${error}`);
+    }
+  });
+
+  // Komenda do zwijania definicji na użycie makra
+  const collapseMacroCommand = vscode.commands.registerCommand("marcotex.collapseMacroToUsage", async () => {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      vscode.window.showWarningMessage('No active editor found');
+      return;
+    }
+
+    const selection = editor.selection;
+    if (selection.isEmpty) {
+      vscode.window.showWarningMessage('Please select a definition to collapse');
+      return;
+    }
+
+    const selectedText = editor.document.getText(selection);
+    
+    try {
+      // Automatycznie znajdź pasującą sygnaturę z konfiguracji
+      const matchingSignature = await MacroConverter.findMatchingSignatureForDefinition(selectedText);
+      
+      if (!matchingSignature) {
+        vscode.window.showWarningMessage('No matching macro signature found in configuration for this definition');
+        return;
+      }
+
+      const collapsedUsage = MacroConverter.convertDefinitionToUsageWithSignature(selectedText, matchingSignature);
+      
+      if (!collapsedUsage) {
+        vscode.window.showWarningMessage('Could not convert definition to macro usage');
+        return;
+      }
+
+      // Zastąp zaznaczony tekst użyciem makra
+      await editor.edit(editBuilder => {
+        editBuilder.replace(selection, collapsedUsage);
+      });
+
+      vscode.window.showInformationMessage(`Collapsed definition to macro usage: ${collapsedUsage}`);
+    } catch (error) {
+      vscode.window.showErrorMessage(`Error collapsing to macro: ${error}`);
+    }
+  });
+
   context.subscriptions.push(
-    dsp1, dsp2, dsp3, macroFinderDisposable, showMacroFinderCommand
+    dsp1, dsp2, dsp3, macroFinderDisposable, showMacroFinderCommand, expandMacroCommand, collapseMacroCommand
   );
   // console.log("Main LaTeX file found", mainLaTeXFile);
   // channel.appendLine(`Main LaTeX file found: ${mainLaTeXFile}`);
