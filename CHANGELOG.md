@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+# [0.2.2]
+
+### Added
+- **LaTeX Macro Finder** - new sidebar panel for discovering and managing LaTeX macros
+- Automatic scanning of all .tex files in project for macro definitions
+- Support for all macro types: `\newcommand`, `\newcommand*`, `\renewcommand`, `\renewcommand*`, `\def`
+- Advanced parsing with multi-line definitions and nested braces
+- Macro filtering by type with dropdown selector
+- **Save Macro feature** - convert found macros to configuration signatures with PATH placeholders
+- One-click save to user settings with optional editing
+
+### Changed
+- Renamed "Macro Manager" to "Macro Finder"
+- Updated activity bar title to "MacroTeX"
+- Enhanced UI with `@vscode-elements` components
+- Improved file structure and class naming consistency
+
 # [0.2.1]
 
 ### Fixed
