@@ -57,7 +57,7 @@
       "activitybar": [
         {
           "id": "marcotex",
-          "title": "LaTeX Table Generator",
+          "title": "MacroTeX",
           "icon": "$(book)"
         }
       ]
@@ -68,6 +68,12 @@
           "id": "marcotex.sidebarView",
           "name": "LaTeX Table Generator",
           "icon": "$(book)",
+          "type": "webview"
+        },
+        {
+          "id": "marcotex.macroFinder",
+          "name": "Macro Finder",
+          "icon": "$(symbol-method)",
           "type": "webview"
         }
       ]
@@ -84,6 +90,10 @@
       {
         "command": "marcotex.insertCsvAsTable",
         "title": "Insert CSV as table"
+      },
+      {
+        "command": "marcotex.showMacroFinder",
+        "title": "Show Macro Finder"
       }
     ],
     "menus": {

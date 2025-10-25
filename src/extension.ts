@@ -3,6 +3,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { TableGeneratorBarProvider } from "./TableGeneratorBarProvider";
 import { csvAsTableCommand } from "./commands/csvToTable";
+import { MacroFinderProvider } from './MacroFinderProvider';
 /**
  * Searches the current workspace for all .tex files and returns a list of file paths that are likely
  * to be main LaTeX files (i.e., files containing a '\documentclass' declaration).
@@ -166,7 +167,13 @@ export const activate = async (context: vscode.ExtensionContext) => {
   console.log("Extension MacroTex is now active!");
 
   const sidebarProvider = new TableGeneratorBarProvider(context.extensionUri);
+  const macroFinderProvider = new MacroFinderProvider(context.extensionUri);
+  
   const dsp2 = vscode.window.registerWebviewViewProvider(TableGeneratorBarProvider.viewType, sidebarProvider);
+  const macroFinderDisposable = vscode.window.registerWebviewViewProvider(
+    MacroFinderProvider.viewType, 
+    macroFinderProvider
+  );
 
   const dsp1 = vscode.commands.registerCommand('marcotex.sidebarView.focus', () => {
     vscode.commands.executeCommand('workbench.view.extension.marcotex');
@@ -176,8 +183,13 @@ export const activate = async (context: vscode.ExtensionContext) => {
     await vscode.commands.executeCommand('marcotex.sidebarView.focus');
   });  
   
+  const showMacroFinderCommand = vscode.commands.registerCommand("marcotex.showMacroFinder", async () => {
+    await vscode.commands.executeCommand('workbench.view.extension.marcotex');
+    await vscode.commands.executeCommand('marcotex.macroFinder.focus');
+  });
+
   context.subscriptions.push(
-    dsp1, dsp2, dsp3
+    dsp1, dsp2, dsp3, macroFinderDisposable, showMacroFinderCommand
   );
   // console.log("Main LaTeX file found", mainLaTeXFile);
   // channel.appendLine(`Main LaTeX file found: ${mainLaTeXFile}`);
