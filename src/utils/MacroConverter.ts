@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { MacroDefinition } from './MacroParser';
+import { MacroIndex } from './MacroIndex';
 
 export interface MacroUsage {
   name: string;
@@ -873,8 +874,15 @@ export class MacroConverter {
    * Znajduje definicję makra w projekcie
    */
   static async findMacroDefinition(macroName: string): Promise<MacroDefinition | null> {
+    const macroIndex = MacroIndex.getInstance();
+    if (macroIndex.isAvailable()) {
+      const match = await macroIndex.getMacroDefinition(macroName);
+      if (match) {
+        return match;
+      }
+    }
+
     try {
-      // Import dynamiczny aby uniknąć circular dependency
       const { MacroParser } = await import('./MacroParser');
       const { findClosestMainLaTeXFile } = await import('../extension');
       
@@ -884,7 +892,7 @@ export class MacroConverter {
       const allMacros = await MacroParser.findAllMacrosInProject(mainFile);
       return allMacros.find(macro => macro.name === macroName) || null;
     } catch (error) {
-      console.error('Error finding macro definition:', error);
+      console.error('Error finding macro definition (fallback):', error);
       return null;
     }
   }

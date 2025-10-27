@@ -23,18 +23,21 @@ export class MacroParser {
       const content = await vscode.workspace.fs.readFile(uri);
       const text = Buffer.from(content).toString('utf-8');
 
-      const macros: MacroDefinition[] = [];
-
-      // Znajdź wszystkie makra używając zaawansowanego parsera
-      macros.push(...this.parseNewCommands(text, filePath));
-      macros.push(...this.parseRenewCommands(text, filePath));
-      macros.push(...this.parseDefCommands(text, filePath));
-
-      return macros;
+      return this.parseMacrosFromText(text, filePath);
     } catch (error) {
       console.error(`Error parsing macros in file ${filePath}:`, error);
       return [];
     }
+  }
+
+  static parseMacrosFromText(text: string, filePath: string): MacroDefinition[] {
+    const macros: MacroDefinition[] = [];
+
+    macros.push(...this.parseNewCommands(text, filePath));
+    macros.push(...this.parseRenewCommands(text, filePath));
+    macros.push(...this.parseDefCommands(text, filePath));
+
+    return macros;
   }
 
   private static parseNewCommands(text: string, filePath: string): MacroDefinition[] {

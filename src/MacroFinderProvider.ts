@@ -1,10 +1,10 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import { MacroParser, type MacroDefinition } from './utils/MacroParser';
+import type { MacroDefinition } from './utils/MacroParser';
 import { MacroGrouper, type MacroGroup } from './utils/MacroGrouper';
 import { MacroSignatureUtils } from './utils/MacroSignatureUtils';
-import { findClosestMainLaTeXFile } from './extension';
+import { MacroIndex } from './utils/MacroIndex';
 
 export class MacroFinderProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'marcotex.macroFinder';
@@ -12,6 +12,8 @@ export class MacroFinderProvider implements vscode.WebviewViewProvider {
   private _view?: vscode.WebviewView;
   private _macroGroups: MacroGroup[] = [];
   private _allMacroGroups: MacroGroup[] = [];
+  private readonly _macroIndex = MacroIndex.getInstance();
+  private _indexListener?: vscode.Disposable;
 
   constructor(private readonly _extensionUri: vscode.Uri) { }
 
@@ -57,25 +59,22 @@ export class MacroFinderProvider implements vscode.WebviewViewProvider {
     });
 
     vscode.window.onDidChangeActiveTextEditor(() => {
-      this.refreshMacros();
+      void this.refreshMacros();
     });
+
+    this._indexListener ??= this._macroIndex.onDidChange(() => {
+      if (this._view) {
+        void this.refreshMacros();
+      }
+    });
+    webviewView.onDidDispose(() => this._indexListener?.dispose());
 
     this.refreshMacros();
   }
 
   private async refreshMacros() {
-    const mainFile = await findClosestMainLaTeXFile();
-    if (!mainFile) {
-      this._allMacroGroups = [];
-      this._macroGroups = [];
-      this._updateWebview();
-      return;
-    }
-
-    const allMacros = await MacroParser.findAllMacrosInProject(mainFile);
+    const allMacros = await this._macroIndex.getAllMacros();
     this._allMacroGroups = MacroGrouper.groupMacrosByType(allMacros);
-
-    // Apply default filter (newcommand*)
     this.filterMacros('newcommand*');
   }
 

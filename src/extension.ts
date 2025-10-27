@@ -6,6 +6,14 @@ import { csvAsTableCommand } from "./commands/csvToTable";
 import { MacroFinderProvider } from './MacroFinderProvider';
 import { MacroConverter } from './utils/MacroConverter';
 import { MacroParser } from './utils/MacroParser';
+import { MacroIndex } from './utils/MacroIndex';
+import {
+  MacroDefinitionProvider,
+  MacroImplementationProvider,
+  MacroReferenceProvider,
+  MacroReferenceCodeLensProvider,
+  MacroNameCompletionProvider
+} from './providers/MacroNavigationProviders';
 /**
  * Searches the current workspace for all .tex files and returns a list of file paths that are likely
  * to be main LaTeX files (i.e., files containing a '\documentclass' declaration).
@@ -161,6 +169,13 @@ function getPreviewMdString(str: string = "img"): vscode.MarkdownString {
   return md;
 }
 
+type MacroConfig = { signature: string; extensions: string[] };
+
+function getConfiguredMacros(): MacroConfig[] {
+  const config = vscode.workspace.getConfiguration('latexMacros');
+  return config.get<MacroConfig[]>('macrosList', []);
+}
+
 // let mainLaTeXFile: string | null = null;
 
 export const activate = async (context: vscode.ExtensionContext) => {
@@ -168,23 +183,26 @@ export const activate = async (context: vscode.ExtensionContext) => {
   channel.appendLine("MacroTex is now active!");
   console.log("Extension MacroTex is now active!");
 
+  const macroIndex = MacroIndex.getInstance();
+  macroIndex.initialize(context, () => findClosestMainLaTeXFile());
+
   const sidebarProvider = new TableGeneratorBarProvider(context.extensionUri);
   const macroFinderProvider = new MacroFinderProvider(context.extensionUri);
-  
+
   const dsp2 = vscode.window.registerWebviewViewProvider(TableGeneratorBarProvider.viewType, sidebarProvider);
   const macroFinderDisposable = vscode.window.registerWebviewViewProvider(
-    MacroFinderProvider.viewType, 
+    MacroFinderProvider.viewType,
     macroFinderProvider
   );
 
   const dsp1 = vscode.commands.registerCommand('marcotex.sidebarView.focus', () => {
     vscode.commands.executeCommand('workbench.view.extension.marcotex');
   });
-  
+
   const dsp3 = vscode.commands.registerCommand("marcotex.showPanel", async () => {
     await vscode.commands.executeCommand('marcotex.sidebarView.focus');
-  });  
-  
+  });
+
   const showMacroFinderCommand = vscode.commands.registerCommand("marcotex.showMacroFinder", async () => {
     await vscode.commands.executeCommand('workbench.view.extension.marcotex');
     await vscode.commands.executeCommand('marcotex.macroFinder.focus');
@@ -206,7 +224,7 @@ export const activate = async (context: vscode.ExtensionContext) => {
 
     const selectedText = editor.document.getText(selection);
     const usage = MacroConverter.parseUsageFromSelection(selectedText);
-    
+
     if (!usage) {
       vscode.window.showWarningMessage('Selected text is not a valid macro usage');
       return;
@@ -215,7 +233,7 @@ export const activate = async (context: vscode.ExtensionContext) => {
     // Sprawdź czy makro jest zdefiniowane w konfiguracji
     const config = vscode.workspace.getConfiguration('latexMacros');
     const macrosList = config.get('macrosList', []);
-    
+
     const isConfiguredMacro = macrosList.some((macro: any) => {
       const macroNameMatch = macro.signature.match(/\\(\w+)/);
       return macroNameMatch && macroNameMatch[1] === usage.name;
@@ -229,12 +247,12 @@ export const activate = async (context: vscode.ExtensionContext) => {
     try {
       // Użyj konfiguracji do wygenerowania definicji
       const expandedDefinition = await MacroConverter.convertUsageToDefinitionFromConfig(usage);
-      
+
       if (!expandedDefinition) {
         vscode.window.showWarningMessage(`Could not generate definition for macro \\${usage.name}`);
         return;
       }
-      
+
       // Zastąp zaznaczony tekst rozwiniętą definicją
       await editor.edit(editBuilder => {
         editBuilder.replace(selection, expandedDefinition);
@@ -261,18 +279,18 @@ export const activate = async (context: vscode.ExtensionContext) => {
     }
 
     const selectedText = editor.document.getText(selection);
-    
+
     try {
       // Automatycznie znajdź pasującą sygnaturę z konfiguracji
       const matchingSignature = await MacroConverter.findMatchingSignatureForDefinition(selectedText);
-      
+
       if (!matchingSignature) {
         vscode.window.showWarningMessage('No matching macro signature found in configuration for this definition');
         return;
       }
 
       const collapsedUsage = MacroConverter.convertDefinitionToUsageWithSignature(selectedText, matchingSignature);
-      
+
       if (!collapsedUsage) {
         vscode.window.showWarningMessage('Could not convert definition to macro usage');
         return;
@@ -290,30 +308,71 @@ export const activate = async (context: vscode.ExtensionContext) => {
   });
 
   context.subscriptions.push(
-    dsp1, dsp2, dsp3, macroFinderDisposable, showMacroFinderCommand, expandMacroCommand, collapseMacroCommand
+    dsp1,
+    dsp2,
+    dsp3,
+    macroFinderDisposable,
+    showMacroFinderCommand,
+    expandMacroCommand,
+    collapseMacroCommand
   );
-  // console.log("Main LaTeX file found", mainLaTeXFile);
-  // channel.appendLine(`Main LaTeX file found: ${mainLaTeXFile}`);
-
-  // const mainfiles = (await findAllMainLaTeXFiles()).join("\n");
-  // console.log("Main LaTeX files found", mainfiles);
-  // channel.appendLine(`Main LaTeX files found: ${mainfiles}`);
-
-  // Get the configuration for your extension
-  const config = vscode.workspace.getConfiguration('latexMacros');
-
-  // Get the list of macros
-  const macrosList: { signature: string, extensions: string[] }[] | undefined = config.get('macrosList');
-  if (!macrosList || macrosList.length === 0) {
-    vscode.window.showErrorMessage("No macros defined");
-    return;
-  }
-
-  console.log("Macros loaded", macrosList);
-  // console.log(mainLaTeXFile);
-  channel.appendLine(`MarcoTex: Found ${macrosList.length} macros`);
-  // channel.appendLine(`MarcoTex: Main LaTeX file: ${mainLaTeXFile}`);
-  vscode.window.showInformationMessage(`MarcoTex: Found ${macrosList.length} macros`);
+  const definitionProviderDisposable = vscode.languages.registerDefinitionProvider(
+    { language: 'latex' },
+    new MacroDefinitionProvider(macroIndex)
+  );
+  const implementationProviderDisposable = vscode.languages.registerImplementationProvider(
+    { language: 'latex' },
+    new MacroImplementationProvider(macroIndex)
+  );
+  const referenceProviderDisposable = vscode.languages.registerReferenceProvider(
+    { language: 'latex' },
+    new MacroReferenceProvider(macroIndex)
+  );
+  const codeLensProviderDisposable = vscode.languages.registerCodeLensProvider(
+    { language: 'latex' },
+    new MacroReferenceCodeLensProvider(macroIndex)
+  );
+  const macroNameCompletionDisposable = vscode.languages.registerCompletionItemProvider(
+    { language: 'latex' },
+    new MacroNameCompletionProvider(macroIndex),
+    '\\'
+  );
+  const showMacroReferencesCommand = vscode.commands.registerCommand(
+    'marcotex.showMacroReferences',
+    async (uri: vscode.Uri, position: vscode.Position, macroName: string) => {
+      const references = await macroIndex.findReferences(macroName);
+      await vscode.commands.executeCommand('editor.action.showReferences', uri, position, references);
+    }
+  );
+  // Command to open macro definition location from hover link
+  const openMacroDefinitionCommand = vscode.commands.registerCommand(
+    'marcotex.openMacroDefinition',
+    async (filePath: string, line?: number) => {
+      try {
+        const uri = vscode.Uri.file(filePath);
+        const doc = await vscode.workspace.openTextDocument(uri);
+        const editor = await vscode.window.showTextDocument(doc, { preview: true });
+        if (typeof line === 'number') {
+          const targetLine = Math.max(0, line - 1);
+          const pos = new vscode.Position(targetLine, 0);
+          const sel = new vscode.Selection(pos, pos);
+          editor.selection = sel;
+          editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenter);
+        }
+      } catch (err) {
+        vscode.window.showErrorMessage(`Cannot open macro definition: ${err}`);
+      }
+    }
+  );
+  context.subscriptions.push(
+    definitionProviderDisposable,
+    implementationProviderDisposable,
+    referenceProviderDisposable,
+    codeLensProviderDisposable,
+    macroNameCompletionDisposable,
+    showMacroReferencesCommand,
+    openMacroDefinitionCommand
+  );
 
   /**
    * Normalizes a macro line by removing specific content within brackets and braces
@@ -339,23 +398,24 @@ export const activate = async (context: vscode.ExtensionContext) => {
       ) {
         const mainLaTeXFile = await findClosestMainLaTeXFile();
         channel.appendLine(`Main LaTeX file: ${mainLaTeXFile}`);
+        const config = vscode.workspace.getConfiguration('latexMacros');
+        if (!config) return [];
+        const macrosList = config.get<{ signature: string; extensions: string[] }[]>('macrosList', []);
         if (!mainLaTeXFile || !macrosList) return [];  // Early return if data is missing
         let skipSnippets = false
         // Filter macros with "PATH" in the signature only once
-        const validMacros = macrosList.filter(macro => macro.signature.includes("PATH"));
+        const validMacros = macrosList.filter((macro: { signature: string; extensions: string[] }) => macro.signature.includes("PATH"));
         if (validMacros.length === 0) return []; // Early return if no valid macros
 
         const line = document.lineAt(position).text;
         const linePrefix = normalizeMacroLine(line.substring(0, position.character));
         let completionItems: vscode.CompletionItem[] = [];
 
-        const config = vscode.workspace.getConfiguration('latexMacros');
-        if (!config) return [];
         const useFolders = config.get("pathSuggestionsFolderBased") || false
         console.log("useFolderBaseAproach", useFolders)
 
         // Process each valid macro
-        const promises = validMacros.map(async (macro) => {
+        const promises = validMacros.map(async (macro: { signature: string; extensions: string[] }) => {
           const macroFirstPart = normalizeMacroLine(macro.signature.split("PATH")[0]);
           console.log(`${linePrefix} === ${macroFirstPart} -> ${linePrefix === macroFirstPart}`);
 
@@ -367,7 +427,7 @@ export const activate = async (context: vscode.ExtensionContext) => {
           if (typedPath.endsWith("/")) typedPath = typedPath.slice(0, -1)
 
           const extensionsGlob = macro.extensions
-            .map(ext => ext.toLowerCase())
+            .map((ext: string) => ext.toLowerCase())
             // .filter(ext => ["jpg", "jpeg", "png"].includes(ext))
             .join(",");
 
@@ -445,7 +505,8 @@ export const activate = async (context: vscode.ExtensionContext) => {
   vscode.commands.registerCommand("marcotex.insetToActiveDocument", async (contextSelection: vscode.Uri, uris: vscode.Uri[]) => {
     const mainLaTeXFile = await findClosestMainLaTeXFile();
     const config = vscode.workspace.getConfiguration('latexMacros');
-    const options = macrosList?.map(macro => macro.signature).filter(macro => macro.includes("PATH"));
+    const macrosList = getConfiguredMacros();
+    const options = macrosList?.map((macro: MacroConfig) => macro.signature).filter((sig: string) => sig.includes("PATH"));
     const editor = vscode.window.activeTextEditor;
 
     if (!config || !editor || !options || !mainLaTeXFile) {
@@ -476,12 +537,12 @@ export const activate = async (context: vscode.ExtensionContext) => {
     }
 
     // Filter macros based on file extensions
-    const validMacros = fileExtensionsToUse.length > 0
-      ? macrosList?.filter(macro => macro.extensions.some(ext => fileExtensionsToUse.includes(ext)))
+    const validMacros: MacroConfig[] = fileExtensionsToUse.length > 0
+      ? macrosList.filter((macro: MacroConfig) => macro.extensions.some((ext: string) => fileExtensionsToUse.includes(ext)))
       : macrosList;
 
     // Extract macro signatures with PATH
-    const macroOptions = validMacros?.map(macro => macro.signature).filter(macro => macro.includes("PATH")) || [];
+    const macroOptions = validMacros?.map((macro: MacroConfig) => macro.signature).filter((sig: string) => sig.includes("PATH")) || [];
 
     if (macroOptions.length === 0) {
       vscode.window.showErrorMessage("No valid macros found for the selected files. Please check the configuration.");
@@ -495,7 +556,7 @@ export const activate = async (context: vscode.ExtensionContext) => {
         placeHolder: 'Select a macro to insert',
       });
 
-    const fileExtensions = macrosList?.find(macro => macro.signature === selectedOption)?.extensions;
+    const fileExtensions = macrosList.find((macro: MacroConfig) => macro.signature === selectedOption)?.extensions;
     if (!fileExtensions) return;
     const uriArray = Array.isArray(uris) ? uris : [uris];
 
@@ -589,6 +650,7 @@ export const activate = async (context: vscode.ExtensionContext) => {
   //! TODO: Add a functionality to detect changes in the file system and update the macros in current file scope accordingly
 
   const onDidDeleteFiles = vscode.workspace.onDidDeleteFiles(async (event) => {
+    macroIndex.markWorkspaceDirty();
     const mainLaTeXFiles = await findAllMainLaTeXFiles();
     if (mainLaTeXFiles.length === 0) return;
     channel.appendLine(`Files deleted: ${event.files}`);
@@ -669,6 +731,7 @@ export const activate = async (context: vscode.ExtensionContext) => {
   });
 
   const onDidRenameFiles = vscode.workspace.onDidRenameFiles(async (event) => {
+    macroIndex.markWorkspaceDirty();
     const mainLaTeXFiles = await findAllMainLaTeXFiles();
     if (mainLaTeXFiles.length === 0) return;
     channel.appendLine(`Files renamed: ${event.files.map(f => f.oldUri.fsPath).join(', ')}`);
@@ -756,11 +819,48 @@ export const activate = async (context: vscode.ExtensionContext) => {
 
   const registerHoverProvider = vscode.languages.registerHoverProvider('latex', {
     async provideHover(document: vscode.TextDocument, position: vscode.Position) {
-      const mainLaTeXFile = await findClosestMainLaTeXFile();
-      const range = document.getWordRangeAtPosition(position, /\{[^}]*\}/);
-      if (!mainLaTeXFile || !range) return undefined;
+      // 1) Hover over macro name (e.g., \fg) -> show its definition
+      const macroRange = document.getWordRangeAtPosition(position, /\\[A-Za-z@]+/);
+      if (macroRange) {
+        const word = document.getText(macroRange);
+        const macroName = word.replace(/^\\/, '');
+        try {
+          const def = await macroIndex.getMacroDefinition(macroName);
+          if (def) {
+            // Reconstruct a readable definition header
+            let header = '';
+            if (def.type === 'newcommand' || def.type === 'newcommand*' || def.type === 'renewcommand' || def.type === 'renewcommand*') {
+              const starred = def.type.endsWith('*') ? '*' : '';
+              const params = def.parameters > 0 ? ` [${def.parameters}]` : '';
+              const defVal = def.defaultValue ? ` [${def.defaultValue}]` : '';
+              header = `\\${def.type.replace('*', '\\*')} {\\${def.name}}${params}${defVal}`;
+            } else if (def.type === 'def') {
+              // For \def we may not know exact parameter tokenization, show count only
+              const params = def.parameters > 0 ? ` (#1..#${def.parameters})` : '';
+              header = `\\def \\${def.name}${params}`;
+            }
 
-      const hoverText = document.getText(range).replace(/[\{\}]/g, '');
+            const linkArgs = encodeURIComponent(JSON.stringify([def.location.file, def.location.line]));
+            const clickableLink = `[here](command:marcotex.openMacroDefinition?${linkArgs})`;
+            const md = new vscode.MarkdownString();
+            md.isTrusted = true;
+            md.supportHtml = true;
+            const code = `${header}{\n${def.definition}\n}`;
+            md.appendMarkdown(`Defined ${clickableLink}`);
+            md.appendCodeblock(code, 'latex');
+            return new vscode.Hover(md, macroRange);
+          }
+        } catch (e) {
+          // ignore and fall through to other hovers
+        }
+      }
+
+      // 2) Hover over path inside braces -> show image preview if it resolves to an image
+      const mainLaTeXFile = await findClosestMainLaTeXFile();
+      const braceRange = document.getWordRangeAtPosition(position, /\{[^}]*\}/);
+      if (!mainLaTeXFile || !braceRange) return undefined;
+
+      const hoverText = document.getText(braceRange).replace(/[\{\}]/g, '');
 
       if (isImageFile(hoverText)) {
         const fullPath = path.resolve(path.dirname(mainLaTeXFile), hoverText);
@@ -769,7 +869,7 @@ export const activate = async (context: vscode.ExtensionContext) => {
           getPreviewImageString(uri) :
           getPreviewMdString("<h1>File not found in filesystem!</h1>");
 
-        return new vscode.Hover(md);
+        return new vscode.Hover(md, braceRange);
       }
       return undefined;  // Return undefined if there's no hover information
     }
@@ -779,6 +879,7 @@ export const activate = async (context: vscode.ExtensionContext) => {
   // context.subscriptions.push(onDidDeleteFiles, onDidRenameFiles, registerHoverProvider, registerCompletionItemProvider);
   vscode.commands.registerCommand("marcotex.insertCsvAsTable", csvAsTableCommand);
   context.subscriptions.push(onDidDeleteFiles, onDidRenameFiles, registerHoverProvider, registerCompletionItemProvider);
+  context.subscriptions.push(definitionProviderDisposable, implementationProviderDisposable, referenceProviderDisposable, codeLensProviderDisposable, macroNameCompletionDisposable, showMacroReferencesCommand);
 };
 
 export const deactivate = () => { }
