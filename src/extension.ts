@@ -13,6 +13,7 @@ import {
   MacroReferenceCodeLensProvider,
   MacroNameCompletionProvider
 } from './providers/MacroNavigationProviders';
+import lescape from 'escape-latex';
 /**
  * Searches the current workspace for all .tex files and returns a list of file paths that are likely
  * to be main LaTeX files (i.e., files containing a '\documentclass' declaration).
@@ -30,7 +31,7 @@ import {
 export async function findAllMainLaTeXFiles(): Promise<string[]> {
   try {
     const texFiles = await vscode.workspace.findFiles('**/*.tex');
-    
+
     // Uproszczone mapowanie i filtrowanie
     const mainFiles = await Promise.all(
       texFiles.map(async file => {
@@ -615,6 +616,116 @@ export const activate = async (context: vscode.ExtensionContext) => {
       vscode.window.showErrorMessage(message);
       return;
     }
+
+    // --- DODANA WALIDACJA NAZW PLIKÓW POD KĄTEM LaTeX ---
+    // Helper: open untitled document listing problematic files
+    const openInvalidsList = async (items: { uri: vscode.Uri; name?: string; inFolder?: boolean }[]) => {
+      const lines = [
+        'Files or folders with names incompatible with LaTeX (original -> escaped):',
+        ''
+      ];
+      for (const it of items) {
+        const name = it.name ?? path.basename(it.uri.fsPath);
+        const escaped = lescape(name);
+        const note = it.inFolder ? ' (problem in parent folder)' : '';
+        lines.push(`- ${it.uri.fsPath}${note}`);
+        lines.push(`  escaped: ${escaped}`);
+        lines.push('');
+      }
+      const content = lines.join('\n');
+      try {
+        const doc = await vscode.workspace.openTextDocument({ content, language: 'text' });
+        await vscode.window.showTextDocument(doc, { preview: false });
+        vscode.window.showWarningMessage('Opened a list of invalid file/folder names in a new editor. Please fix names or accept rename and try again.');
+      } catch (err) {
+        vscode.window.showErrorMessage(`Cannot open list of invalid file names: ${err}`);
+      }
+    };
+
+    // Check files and their parent folders using lescape
+    const checkInvalids = async (uris: vscode.Uri[], mainLaTeXFile: string) => {
+      const invalids: { uri: vscode.Uri; name: string; fileInvalid: boolean; inFolder: boolean }[] = [];
+
+      for (const uri of uris) {
+        const relativePath = getRelativePathToMain(uri.fsPath, mainLaTeXFile);
+        const parts = relativePath.split(path.sep);
+        const fileName = parts.pop()!; // ostatni segment to plik
+
+        const fileInvalid = lescape(fileName) !== fileName;
+        const folderInvalid = parts.some(part => lescape(part) !== part);
+
+        if (fileInvalid || folderInvalid) {
+          invalids.push({
+            uri,
+            name: fileName,
+            fileInvalid,
+            inFolder: folderInvalid
+          });
+        }
+      }
+
+      return invalids;
+    };
+
+    const invalids = await checkInvalids(uriArrayCleaned, mainLaTeXFile);
+
+    if (invalids.length > 0) {
+      // If any problem is in a parent folder -> abort and show list
+      if (invalids.some(i => i.inFolder)) {
+        vscode.window.showErrorMessage(
+          "One or more parent folders contain characters not allowed in LaTeX. Insertion aborted."
+        );
+        await openInvalidsList(invalids.filter(i => i.inFolder));
+        return;
+      }
+
+      // Now only single files with problems remain
+      if (invalids.length === 1) {
+        const { uri: badUri, name } = invalids[0];
+        const escaped = lescape(name);
+        const onlyUnderscoresEscaped = escaped === name.replace(/_/g, '\\_');
+
+        if (onlyUnderscoresEscaped) {
+          const answer = await vscode.window.showInformationMessage(
+            `File name '${name}' contains '_' which may cause LaTeX compilation errors. Replace all '_' with '-' on disk?`,
+            'Yes',
+            'No'
+          );
+
+          if (answer === 'Yes') {
+            const newName = name.replace(/_/g, '-');
+            const newFsPath = path.join(path.dirname(badUri.fsPath), newName);
+            const newUri = vscode.Uri.file(newFsPath);
+
+            try {
+              await vscode.workspace.fs.rename(badUri, newUri);
+
+              // Update the list for further processing
+              const idx = uriArrayCleaned.findIndex(u => u.fsPath === badUri.fsPath);
+              if (idx >= 0) uriArrayCleaned[idx] = newUri;
+
+              vscode.window.showInformationMessage(`Renamed file to '${newName}'. Continuing insertion.`);
+            } catch (err) {
+              vscode.window.showErrorMessage(`Failed to rename file: ${err}`);
+              await openInvalidsList(invalids);
+              return;
+            }
+          } else {
+            await openInvalidsList(invalids);
+            return;
+          }
+        } else {
+          // single file with other invalid characters -> abort and show list
+          await openInvalidsList(invalids);
+          return;
+        }
+      } else {
+        // multiple invalid files -> abort and show list
+        await openInvalidsList(invalids);
+        return;
+      }
+    }
+    // --- KONIEC WALIDACJI ---
 
     if (selectedOption) {
       let finalMacros = "";
