@@ -5,7 +5,6 @@ import { TableGeneratorBarProvider } from "./TableGeneratorBarProvider";
 import { csvAsTableCommand } from "./commands/csvToTable";
 import { MacroFinderProvider } from './MacroFinderProvider';
 import { MacroConverter } from './utils/MacroConverter';
-import { MacroParser } from './utils/MacroParser';
 import { MacroIndex } from './utils/MacroIndex';
 import {
   MacroDefinitionProvider,
@@ -31,15 +30,17 @@ import {
 export async function findAllMainLaTeXFiles(): Promise<string[]> {
   try {
     const texFiles = await vscode.workspace.findFiles('**/*.tex');
-    const fileChecks = texFiles.map(async file => {
-      const content = await vscode.workspace.fs.readFile(file);
-      const text = Buffer.from(content).toString('utf-8');
-      return text.includes('\\documentclass') ? replaceWindowsPath(file.fsPath) : null;
-    });
+    
+    // Uproszczone mapowanie i filtrowanie
+    const mainFiles = await Promise.all(
+      texFiles.map(async file => {
+        const content = await vscode.workspace.fs.readFile(file);
+        const text = Buffer.from(content).toString('utf-8');
+        return text.includes('\\documentclass') ? replaceWindowsPath(file.fsPath) : null;
+      })
+    );
 
-    const results = await Promise.all(fileChecks);
-    const mainFiles = results.filter((path): path is string => path !== null)
-    return mainFiles;
+    return mainFiles.filter((path): path is string => path !== null);
   } catch (error) {
     console.error('Error finding main LaTeX files:', error);
     return [];
@@ -138,8 +139,8 @@ function replaceWindowsPath(_path: string): string {
  * @returns True if the file is an image file, false otherwise
  */
 function isImageFile(file: string): boolean {
-  file = file.toLowerCase();
-  return file.endsWith('.png') || file.endsWith('.jpg') || file.endsWith('.jpeg');
+  const imageExtensions = ['.png', '.jpg', '.jpeg'];
+  return imageExtensions.some(ext => file.toLowerCase().endsWith(ext));
 }
 
 /**
@@ -502,7 +503,7 @@ export const activate = async (context: vscode.ExtensionContext) => {
     });
 
 
-  vscode.commands.registerCommand("marcotex.insetToActiveDocument", async (contextSelection: vscode.Uri, uris: vscode.Uri[]) => {
+  vscode.commands.registerCommand("marcotex.insetToActiveDocument", async (_contextSelection: vscode.Uri, uris: vscode.Uri[]) => {
     const mainLaTeXFile = await findClosestMainLaTeXFile();
     const config = vscode.workspace.getConfiguration('latexMacros');
     const macrosList = getConfiguredMacros();
@@ -830,7 +831,6 @@ export const activate = async (context: vscode.ExtensionContext) => {
             // Reconstruct a readable definition header
             let header = '';
             if (def.type === 'newcommand' || def.type === 'newcommand*' || def.type === 'renewcommand' || def.type === 'renewcommand*') {
-              const starred = def.type.endsWith('*') ? '*' : '';
               const params = def.parameters > 0 ? ` [${def.parameters}]` : '';
               const defVal = def.defaultValue ? ` [${def.defaultValue}]` : '';
               header = `\\${def.type.replace('*', '\\*')} {\\${def.name}}${params}${defVal}`;
