@@ -17,12 +17,32 @@
     /* Linting */
     "skipLibCheck": true,
     "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "forceConsistentCasingInFileNames": true,
+    /* Dodatkowe opcje bezpieczeństwa */
+    "noImplicitReturns": true,
+    // "noUncheckedIndexedAccess": true,  // Bardzo restrykcyjne - wymaga sprawdzania każdego array[index]
+    // "noPropertyAccessFromIndexSignature": true,  // Wymusza obj["key"] zamiast obj.key
+    // "exactOptionalPropertyTypes": true,  // Bardzo restrykcyjne dla optional properties
+    "allowUnusedLabels": false,
+    "allowUnreachableCode": false,
+    /* Inne */
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
     "paths": {
       "vscode": [
         "./mocks/vscode.ts"
       ]
     }
-  }
+  },
+  "exclude": [
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "node_modules",
+    "out",
+    "dist",
+    ".vscode-test"
+  ]
 }

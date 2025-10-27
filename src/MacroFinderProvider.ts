@@ -1,10 +1,10 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import type { MacroDefinition } from './utils/MacroParser';
+import { MacroParser, type MacroDefinition } from './utils/MacroParser';
 import { MacroGrouper, type MacroGroup } from './utils/MacroGrouper';
 import { MacroSignatureUtils } from './utils/MacroSignatureUtils';
-import { MacroIndex } from './utils/MacroIndex';
+import { findClosestMainLaTeXFile } from './extension';
 
 export class MacroFinderProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'marcotex.macroFinder';
@@ -12,14 +12,12 @@ export class MacroFinderProvider implements vscode.WebviewViewProvider {
   private _view?: vscode.WebviewView;
   private _macroGroups: MacroGroup[] = [];
   private _allMacroGroups: MacroGroup[] = [];
-  private readonly _macroIndex = MacroIndex.getInstance();
-  private _indexListener?: vscode.Disposable;
 
   constructor(private readonly _extensionUri: vscode.Uri) { }
 
   public resolveWebviewView(
     webviewView: vscode.WebviewView,
-    context: vscode.WebviewViewResolveContext,
+    _context: vscode.WebviewViewResolveContext,
     _token: vscode.CancellationToken,
   ) {
     this._view = webviewView;
@@ -59,22 +57,25 @@ export class MacroFinderProvider implements vscode.WebviewViewProvider {
     });
 
     vscode.window.onDidChangeActiveTextEditor(() => {
-      void this.refreshMacros();
+      this.refreshMacros();
     });
-
-    this._indexListener ??= this._macroIndex.onDidChange(() => {
-      if (this._view) {
-        void this.refreshMacros();
-      }
-    });
-    webviewView.onDidDispose(() => this._indexListener?.dispose());
 
     this.refreshMacros();
   }
 
   private async refreshMacros() {
-    const allMacros = await this._macroIndex.getAllMacros();
+    const mainFile = await findClosestMainLaTeXFile();
+    if (!mainFile) {
+      this._allMacroGroups = [];
+      this._macroGroups = [];
+      this._updateWebview();
+      return;
+    }
+
+    const allMacros = await MacroParser.findAllMacrosInProject(mainFile);
     this._allMacroGroups = MacroGrouper.groupMacrosByType(allMacros);
+
+    // Apply default filter (newcommand*)
     this.filterMacros('newcommand*');
   }
 
@@ -239,6 +240,10 @@ export class MacroFinderProvider implements vscode.WebviewViewProvider {
       ? webview.asWebviewUri(vscode.Uri.file(path.dirname(elementsMainPath)))
       : webview.asWebviewUri(vscode.Uri.file(path.dirname(elementsFallbackPath)));
     const elementsScript = useMainPath ? 'bundled.js' : 'toolkit.js';
+
+    const macroFinderJs = path.join(this._extensionUri.fsPath, 'dist', 'table-generator.js');
+    const macroFinderPath = webview.asWebviewUri(vscode.Uri.file(path.dirname(macroFinderJs)));
+
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -426,139 +431,7 @@ export class MacroFinderProvider implements vscode.WebviewViewProvider {
         <div class="no-macros">Loading macros...</div>
     </div>
 
-    <script type="module">
-        const vscode = acquireVsCodeApi();
-
-        document.getElementById('refreshBtn').addEventListener('click', () => {
-            vscode.postMessage({ type: 'refreshMacros' });
-        });
-
-        document.getElementById('macroTypeFilter').addEventListener('change', (e) => {
-            vscode.postMessage({ type: 'filterChanged', filter: e.target.value });
-        });
-
-        function attachEventListeners() {
-            document.querySelectorAll('.insert-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    vscode.postMessage({ type: 'insertMacro', macro: JSON.parse(btn.dataset.macro) });
-                });
-            });
-            document.querySelectorAll('.go-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    vscode.postMessage({ type: 'goToMacro', macro: JSON.parse(btn.dataset.macro) });
-                });
-            });
-            document.querySelectorAll('.delete-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    vscode.postMessage({ type: 'deleteMacro', macro: JSON.parse(btn.dataset.macro) });
-                });
-            });
-            document.querySelectorAll('.save-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    vscode.postMessage({ type: 'saveMacro', macro: JSON.parse(btn.dataset.macro) });
-                });
-            });
-        }
-
-        function escapeForAttribute(obj) {
-            return JSON.stringify(obj).replace(/"/g, '&quot;');
-        }
-
-        function checkCanConvertToSignature(macro) {
-            // Client-side version of MacroSignatureUtils.canConvertToSignature
-            const pathPatterns = [
-                /\\\\includegraphics/,
-                /\\\\input/,
-                /\\\\include/,
-                /PATH/i,
-                /\\{[^}]*\\.(png|jpg|jpeg|pdf|eps|svg)[^}]*\\}/i,
-                /\\{[^}]*\\/[^}]*\\}/  // zawiera ścieżkę z slash
-            ];
-            
-            return pathPatterns.some(pattern => pattern.test(macro.definition));
-        }
-
-        function updateFilterOptions(allGroups) {
-            const filter = document.getElementById('macroTypeFilter');
-            const currentValue = filter.value;
-            
-            const options = [
-                { value: 'all', text: \`All types (\${allGroups.reduce((sum, g) => sum + g.macros.length, 0)})\` },
-                { value: 'newcommand', text: \`\\\\newcommand (\${allGroups.find(g => g.type === 'newcommand')?.macros.length || 0})\` },
-                { value: 'newcommand*', text: \`\\\\newcommand* (\${allGroups.find(g => g.type === 'newcommand*')?.macros.length || 0})\` },
-                { value: 'renewcommand', text: \`\\\\renewcommand (\${allGroups.find(g => g.type === 'renewcommand')?.macros.length || 0})\` },
-                { value: 'renewcommand*', text: \`\\\\renewcommand* (\${allGroups.find(g => g.type === 'renewcommand*')?.macros.length || 0})\` },
-                { value: 'def', text: \`\\\\def (\${allGroups.find(g => g.type === 'def')?.macros.length || 0})\` }
-            ];
-            
-            const availableOptions = options.filter(opt => 
-                opt.value === 'all' || 
-                allGroups.some(g => g.type === opt.value && g.macros.length > 0)
-            );
-            
-            filter.innerHTML = availableOptions.map(opt => 
-                \`<vscode-option value="\${opt.value}" \${opt.value === currentValue ? 'selected' : ''}>\${opt.text}</vscode-option>\`
-            ).join('');
-        }
-
-        function renderMacroGroups(groups, allGroups) {
-            const container = document.getElementById('macroGroups');
-            
-            // Aktualizuj opcje filtra
-            if (allGroups) {
-                updateFilterOptions(allGroups);
-            }
-            
-            if (!groups || groups.length === 0) {
-                container.innerHTML = '<div class="no-macros">No macros found for selected filter</div>';
-                return;
-            }
-            
-            container.innerHTML = groups.map(group =>
-                \`<div class="group-section">
-                    <div class="group-header">\${group.icon} \${group.displayName} (\${group.macros.length})</div>
-                    \${group.macros.map(m => {
-                        const fileName = m.location.file.split('/').pop() || '';
-                        const parametersText = m.parameters > 0 ? 
-                            \`<span class="parameters">\${m.parameters} params</span>\` : '';
-                        const usageExample = \`\\\\\${m.name}\` + 
-                            Array.from({ length: m.parameters }, (_, i) => \`{arg\${i + 1}}\`).join('');
-                        
-                        // Check if macro can be converted to signature
-                        const canConvert = checkCanConvertToSignature(m);
-                        const saveButton = canConvert ? 
-                            \`<vscode-button class="save-btn" data-macro="\${escapeForAttribute(m)}">💾 Save Macro</vscode-button>\` : '';
-                        
-                        return \`<div class="macro-item">
-                            <div class="macro-header">
-                                <span class="macro-name">\\\\\${m.name}</span>
-                                \${parametersText}
-                            </div>
-                            <div class="macro-usage">Usage: \${usageExample}</div>
-                            <div class="macro-definition">\${m.definition}</div>
-                            <div class="macro-location">📁 \${fileName}:\${m.location.line}</div>
-                            <div class="macro-actions">
-                                <vscode-button class="insert-btn" appearance="primary" data-macro="\${escapeForAttribute(m)}">➕ Insert</vscode-button>
-                                <vscode-button class="go-btn" appearance="secondary" data-macro="\${escapeForAttribute(m)}">📍 Go</vscode-button>
-                                \${saveButton}
-                                <vscode-button class="delete-btn" data-macro="\${escapeForAttribute(m)}">🗑️ Delete</vscode-button>
-                            </div>
-                        </div>\`;
-                    }).join('')}
-                </div>\`
-            ).join('');
-            
-            attachEventListeners();
-        }
-
-        window.addEventListener('message', event => {
-            if (event.data.type === 'updateMacroGroups') {
-                renderMacroGroups(event.data.groups, event.data.allGroups);
-            }
-        });
-
-        vscode.postMessage({ type: 'refreshMacros' });
-    </script>
+    <script src="${macroFinderPath}/macro-finder.js" type="module" defer></script>
 </body>
 </html>`;
   }

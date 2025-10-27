@@ -16,7 +16,7 @@ import * as fs from 'fs';
  * @throws Will show an error message if the CSV file has no data
  * @throws Will show an error message if insertion fails
  */
-export const csvAsTableCommand = async (contextSelection: vscode.Uri, uris: vscode.Uri) => {
+export const csvAsTableCommand = async (contextSelection: vscode.Uri, _uris: vscode.Uri) => {
     if (!contextSelection.fsPath.endsWith('.csv')) {
         vscode.window.showErrorMessage("Selected file is not a CSV file");
         return;
