@@ -80,14 +80,12 @@ export class MacroConverter {
    * Konwertuje użycie makra z konfiguracji na pełną definicję
    */
   static async convertUsageToDefinitionFromConfig(usage: MacroUsage): Promise<string | null> {
-    const config = vscode.workspace.getConfiguration('latexMacros');
-    const macrosList: MacroSignatureConfig[] = config.get('macrosList') || [];
+    const macrosList = vscode.workspace.getConfiguration('latexMacros').get<MacroSignatureConfig[]>('macrosList', []);
     
-    // Znajdź pasującą sygnaturę w konfiguracji
-    const matchingSignature = macrosList.find(signature => {
-      const macroNameMatch = signature.signature.match(/\\(\w+)/);
-      return macroNameMatch && macroNameMatch[1] === usage.name;
-    });
+    // Znajdź pasującą sygnaturę w konfiguracji - uproszczone
+    const matchingSignature = macrosList.find(sig => 
+      sig.signature.match(/\\(\w+)/)?.[1] === usage.name
+    );
     
     if (!matchingSignature) {
       return null;
@@ -158,7 +156,7 @@ export class MacroConverter {
   /**
    * Mapuje parametry dla notacji LaTeX ({#1}, {#2}, {#3})
    */
-  private static mapParametersFromLatexSignature(signature: string, parameters: string[], optionalParam: string | undefined, macroDefinition: MacroDefinition): Map<number, string> {
+  private static mapParametersFromLatexSignature(_signature: string, parameters: string[], optionalParam: string | undefined, macroDefinition: MacroDefinition): Map<number, string> {
     const mapping = new Map<number, string>();
 
     const hasOptionalInDefinition = !!(macroDefinition.defaultValue);
@@ -184,141 +182,13 @@ export class MacroConverter {
    * Rozwija definicję makra podstawiając parametry według mapowania
    */
   private static expandMacroDefinitionWithParameterMapping(definition: string, parameterMapping: Map<number, string>): string {
-    let result = definition;
-
     // Replace in descending order to avoid partial collisions (#1 vs #10)
-    const positions = Array.from(parameterMapping.keys()).sort((a, b) => b - a);
-    for (const position of positions) {
-      const value = parameterMapping.get(position)!;
-      // Match literal #n not followed by a digit
-      const re = new RegExp(`#${position}(?!\\d)`, 'g');
-      result = result.replace(re, value);
-    }
-
-    return result;
-  }
-
-  /**
-   * Rozwija definicję makra podstawiając rzeczywiste parametry (stara metoda - do usunięcia)
-   */
-  private static expandMacroDefinitionWithParameters(definition: string, parameters: string[], optionalParam?: string): string {
-    let result = definition;
-    
-    // Zastąp parametry #1, #2, #3, etc.
-    parameters.forEach((param, index) => {
-      const placeholder = `#${index + 1}`;
-      result = result.replace(new RegExp(`\\${placeholder}\\b`, 'g'), param);
-    });
-    
-    // Obsłuż opcjonalne parametry - szukaj wzorców które mogą być opcjonalne
-    if (optionalParam) {
-      // Jeśli definicja zawiera width=\textwidth, zastąp go opcjonalnym parametrem
-      result = result.replace(/width=\\textwidth/g, `width=${optionalParam}`);
-      
-      // Szukaj innych wzorców które mogą być opcjonalne
-      result = result.replace(/\[\\textwidth\]/g, `[${optionalParam}]`);
-    }
-    
-    return result;
-  }
-
-  /**
-   * Generuje pełną definicję LaTeX na podstawie sygnatury i parametrów
-   */
-  private static generateDefinitionFromSignature(signature: MacroSignatureConfig, parameters: string[], optionalParam?: string): string {
-    // Fallback na stary system dla kompatybilności wstecznej
-    const macroNameMatch = signature.signature.match(/\\(\w+)/);
-    if (!macroNameMatch) return '';
-    
-    // Wykryj typ makra na podstawie typu lub heurystyki
-    const type = signature.type || this.detectMacroType(signature);
-    
-    switch (type) {
-      case 'figure':
-        return this.generateFigureDefinition(parameters, optionalParam);
-      case 'table':
-        return this.generateTableDefinition(parameters, optionalParam);
-      default:
-        return this.generateGenericDefinition(signature, parameters);
-    }
-  }
-
-  /**
-   * Wykrywa typ makra na podstawie heurystyki (fallback)
-   */
-  private static detectMacroType(signature: MacroSignatureConfig): 'figure' | 'table' | 'listing' | 'generic' {
-    if (this.isFigureMacro(signature)) return 'figure';
-    if (this.isTableMacro(signature)) return 'table';
-    if (this.isListingMacro(signature)) return 'listing';
-    return 'generic';
-  }
-
-  /**
-   * Sprawdza czy makro jest typu figure
-   */
-  private static isFigureMacro(signature: MacroSignatureConfig): boolean {
-    const imageExtensions = ['png', 'jpg', 'jpeg', 'pdf', 'eps', 'svg'];
-    return signature.extensions.some(ext => imageExtensions.includes(ext.toLowerCase()));
-  }
-
-  /**
-   * Sprawdza czy makro jest typu table
-   */
-  private static isTableMacro(signature: MacroSignatureConfig): boolean {
-    return signature.signature.toLowerCase().includes('tab') || 
-           signature.signature.toLowerCase().includes('table');
-  }
-
-  /**
-   * Sprawdza czy makro jest typu listing
-   */
-  private static isListingMacro(signature: MacroSignatureConfig): boolean {
-    const codeExtensions = ['txt', 'c', 'cpp', 'h', 'hpp', 'py', 'js', 'ts', 'java', 'cs', 'm', 'mm'];
-    return signature.extensions.some(ext => codeExtensions.includes(ext.toLowerCase())) ||
-           signature.signature.toLowerCase().includes('listing') ||
-           signature.signature.toLowerCase().includes('code');
-  }
-
-  /**
-   * Generuje definicję figure
-   */
-  private static generateFigureDefinition(parameters: string[], optionalParam?: string): string {
-    const [path, caption = 'Caption', label = 'figure'] = parameters;
-    
-    // Użyj opcjonalnego parametru jako szerokości, domyślnie \textwidth
-    const width = optionalParam || '\\textwidth';
-    
-    return `\\begin{figure}[!htb]
-    \\begin{center}
-        \\includegraphics[width=${width}]{${path}}
-        \\caption{${caption}}
-        \\label{rys:${label}}
-    \\end{center}
-\\end{figure}`;
-  }
-
-  /**
-   * Generuje definicję table
-   */
-  private static generateTableDefinition(parameters: string[], optionalParam?: string): string {
-    const [content, caption = 'Table caption', label = 'table'] = parameters;
-    
-    return `\\begin{table}[!htb]
-    \\begin{center}
-        \\caption{${caption}}
-        \\label{tab:${label}}
-        ${content}
-    \\end{center}
-\\end{table}`;
-  }
-
-  /**
-   * Generuje generyczną definicję makra
-   */
-  private static generateGenericDefinition(signature: MacroSignatureConfig, parameters: string[]): string {
-    // Prosta implementacja - można rozszerzyć
-    const paramList = parameters.map((param, index) => `Parameter ${index + 1}: ${param}`).join('\n');
-    return `% Generated from ${signature.signature}\n${paramList}`;
+    return Array.from(parameterMapping.keys())
+      .sort((a, b) => b - a)
+      .reduce((result, position) => {
+        const value = parameterMapping.get(position)!;
+        return result.replace(new RegExp(`#${position}(?!\\d)`, 'g'), value);
+      }, definition);
   }
 
   /**
@@ -347,30 +217,17 @@ export class MacroConverter {
    * Automatycznie wykrywa pasującą sygnaturę makra z konfiguracji dla danej definicji
    */
   static async findMatchingSignatureForDefinition(definition: string): Promise<MacroSignatureConfig | null> {
-    const config = vscode.workspace.getConfiguration('latexMacros');
-    const macrosList: MacroSignatureConfig[] = config.get('macrosList') || [];
-    
-    // Znajdź wszystkie makra z projektu
+    const macrosList = vscode.workspace.getConfiguration('latexMacros').get<MacroSignatureConfig[]>('macrosList', []);
     const projectMacros = await this.getAllProjectMacros();
     
-    // Sprawdź każdą sygnaturę czy pasuje do definicji
-    for (const signature of macrosList) {
-      const macroNameMatch = signature.signature.match(/\\(\w+)/);
-      if (!macroNameMatch) continue;
+    // Wykorzystaj Array.find z uproszczoną logiką
+    return macrosList.find(signature => {
+      const macroName = signature.signature.match(/\\(\w+)/)?.[1];
+      if (!macroName) return false;
       
-      const macroName = macroNameMatch[1];
-      
-      // Znajdź odpowiadające makro w projekcie
       const projectMacro = projectMacros.find(macro => macro.name === macroName);
-      if (!projectMacro) continue;
-      
-      // Sprawdź czy definicja pasuje do znalezionego makra
-      if (this.definitionsMatch(definition, projectMacro.definition)) {
-        return signature;
-      }
-    }
-    
-    return null;
+      return projectMacro && this.definitionsMatch(definition, projectMacro.definition);
+    }) ?? null;
   }
 
   /**
@@ -395,32 +252,17 @@ export class MacroConverter {
    * Sprawdza czy dwie definicje reprezentują to samo makro (z uwzględnieniem podstawień parametrów)
    */
   private static definitionsMatch(definition1: string, definition2: string): boolean {
-    // Usuń parametry z obu definicji aby porównać strukturę
-    const normalize = (def: string) => {
-      return def
-        // Usuń parametry #1, #2, etc. i zastąp PLACEHOLDER
-        .replace(/#\d+/g, 'PLACEHOLDER')
-        // Usuń wartości w nawiasach klamrowych (podstawione parametry) i zastąp PLACEHOLDER
-        .replace(/\{[^}]*\}/g, '{PLACEHOLDER}')
-        // Usuń wartości po = w atrybutach i zastąp PLACEHOLDER
-        .replace(/=\s*[^,\]\}\s]+/g, '=PLACEHOLDER')
-        // Usuń wartości w cudzysłowach
-        .replace(/"[^"]*"/g, '"PLACEHOLDER"')
-        .replace(/'[^']*'/g, "'PLACEHOLDER")
-        // Usuń białe znaki i newlines
-        .replace(/\s+/g, ' ')
-        .trim();
-    };
+    const normalize = (def: string) => def
+      .replace(/#\d+/g, 'PLACEHOLDER')                      // Parametry #1, #2
+      .replace(/\{[^}]*\}/g, '{PLACEHOLDER}')               // Wartości w {}
+      .replace(/=\s*[^,\]\}\s]+/g, '=PLACEHOLDER')          // Wartości po =
+      .replace(/"[^"]*"/g, '"PLACEHOLDER"')                 // Wartości w ""
+      .replace(/'[^']*'/g, "'PLACEHOLDER")                  // Wartości w ''
+      .replace(/\s+/g, ' ')                                 // Białe znaki
+      .trim();
     
-    const normalized1 = normalize(definition1);
-    const normalized2 = normalize(definition2);
-    
-    // Sprawdź czy struktury są podobne (przynajmniej 70% zgodności)
-    const similarity = this.calculateSimilarity(normalized1, normalized2);
-    
-    const match = similarity > 0.7;
-    
-    return match;
+    const similarity = this.calculateSimilarity(normalize(definition1), normalize(definition2));
+    return similarity > 0.7;
   }
 
   /**
@@ -468,53 +310,6 @@ export class MacroConverter {
   }
 
   /**
-   * Sprawdza czy definicja pasuje do sygnatury makra
-   */
-  private static definitionMatchesSignature(definition: string, signature: MacroSignatureConfig): boolean {
-    // Sprawdź typ makra jeśli jest zdefiniowany
-    if (signature.type) {
-      return this.definitionMatchesType(definition, signature.type);
-    }
-    
-    // Fallback na stary system dla kompatybilności wstecznej
-    const definitionIndicators = [
-      /\\includegraphics/i,
-      /\\begin\{figure\}/i,
-      /\\begin\{table\}/i,
-      /\\caption/i,
-      /\\label/i
-    ];
-    
-    // Sprawdź rozszerzenia plików
-    const hasMatchingExtensions = signature.extensions.some(ext => 
-      definition.includes(`.${ext}`) || 
-      new RegExp(`\\\\.(${ext})\\b`, 'i').test(definition)
-    );
-    
-    // Sprawdź czy definicja zawiera wzorce typowe dla tego typu makra
-    const hasRelevantContent = definitionIndicators.some(indicator => 
-      indicator.test(definition)
-    );
-    
-    return hasMatchingExtensions || hasRelevantContent;
-  }
-
-  /**
-   * Sprawdza czy definicja pasuje do określonego typu
-   */
-  private static definitionMatchesType(definition: string, type: string): boolean {
-    switch (type) {
-      case 'figure':
-        return /\\begin\{figure\}|\\includegraphics/i.test(definition);
-      case 'table':
-        return /\\begin\{table\}|\\begin\{tabular\}/i.test(definition);
-      case 'generic':
-      default:
-        return true; // Generic może pasować do wszystkiego
-    }
-  }
-
-  /**
    * Konwertuje definicję na użycie makra na podstawie sygnatury z konfiguracji
    */
   static convertDefinitionToUsageWithSignature(definition: string, signature: MacroSignatureConfig): string | null {
@@ -527,17 +322,14 @@ export class MacroConverter {
     // Wyciągnij parametry z definicji na podstawie sygnatury
     const parameters = this.extractParametersFromDefinitionUsingSignature(definition, signature);
     
-    // Wyciągnij opcjonalny parametr (width) z definicji
+    // Wyciągnij opcjonalny parametr z definicji
     const optionalParam = this.extractOptionalParameterFromDefinition(definition);
     
     // Zbuduj użycie makra na podstawie sygnatury
     let usage = `\\${macroName}`;
     
-    // Sprawdź czy sygnatura zawiera opcjonalny parametr
-    const hasOptionalInSignature = signature.signature.includes('[');
-    
-    // Dodaj opcjonalny parametr jeśli istnieje w sygnaturze i nie jest domyślny
-    if (hasOptionalInSignature && optionalParam && optionalParam !== '\\textwidth') {
+    // Dodaj opcjonalny parametr jeśli został znaleziony w definicji
+    if (optionalParam) {
       usage += `[${optionalParam}]`;
     }
     
@@ -621,91 +413,72 @@ export class MacroConverter {
    * Wyciąga parametry pozycyjnie - prostsze podejście
    */
   private static extractParametersPositionally(definition: string, signature: MacroSignatureConfig): string[] {
-    // Dla notacji LaTeX ({#1}, {#2}, {#3}) lub trybu positional
-    // Po prostu wyciągnij wszystkie wartości w nawiasach klamrowych i atrybutach
-    
-    let expectedParamCount = 0;
-    
-    // Sprawdź czy to notacja LaTeX
-    if (this.isLatexStyleSignature(signature.signature)) {
-      // Policz parametry #1, #2, #3...
-      const paramMatches = signature.signature.match(/#\d+/g);
-      expectedParamCount = paramMatches ? paramMatches.length : 0;
-    } else {
-      // Policz placeholdery {placeholder}
-      const placeholderPattern = /\{(\w+)\}/g;
-      expectedParamCount = (signature.signature.match(placeholderPattern) || []).length;
-    }
+    // Oblicz oczekiwaną liczbę parametrów
+    const expectedParamCount = this.isLatexStyleSignature(signature.signature)
+      ? (signature.signature.match(/#\d+/g)?.length ?? 0)
+      : (signature.signature.match(/\{(\w+)\}/g)?.length ?? 0);
     
     if (expectedParamCount === 0) return [];
     
-    // Znajdź wszystkie możliwe wartości parametrów w definicji
-    const allMatches: string[] = [];
+    // Wyciągnij wszystkie unikalne wartości parametrów
+    const allMatches = this.extractAllParameterValues(definition);
     
-    // Wzorce do wyciągania parametrów (w kolejności priorytetów)
-    const patterns = [
-      // 1. Parametry w atrybutach: name=value (najczęściej to są nasze parametry)
-      /(\w+)\s*=\s*([^,\]\}\s]+)/g,
-      // 2. Parametry w atrybutach z cudzysłowami: name="value" 
-      /(\w+)\s*=\s*"([^"]+)"/g,
-      // 3. Parametry w nawiasach klamrowych: {content}
-      /\{([^}]*)\}/g,
-    ];
-    
-    // Wyciągnij parametry z atrybutów (title=value, id=value)
-    const attrPattern = /(\w+)\s*=\s*([^,\]\}\s"']+|"[^"]*"|'[^']*')/g;
-    let attrMatch;
-    while ((attrMatch = attrPattern.exec(definition)) !== null) {
-      let value = attrMatch[2].trim();
-      // Usuń cudzysłowy jeśli są
-      if ((value.startsWith('"') && value.endsWith('"')) || 
-          (value.startsWith("'") && value.endsWith("'"))) {
-        value = value.slice(1, -1);
-      }
-      if (value && !allMatches.includes(value)) {
-        allMatches.push(value);
-      }
-    }
-    
-    // Dodaj parametry z nawiasów klamrowych
-    const bracePattern = /\{([^}]*)\}/g;
-    let braceMatch;
-    while ((braceMatch = bracePattern.exec(definition)) !== null) {
-      const value = braceMatch[1].trim();
-      if (value && !allMatches.includes(value)) {
-        allMatches.push(value);
-      }
-    }
-    
-    // Jeśli mamy za mało parametrów, dodaj puste
+    // Uzupełnij brakujące parametry pustymi stringami
     while (allMatches.length < expectedParamCount) {
       allMatches.push('');
     }
     
-    // Weź pierwsze N parametrów gdzie N = expectedParamCount
     return allMatches.slice(0, expectedParamCount);
+  }
+
+  /**
+   * Wyciąga wszystkie wartości parametrów z definicji
+   */
+  private static extractAllParameterValues(definition: string): string[] {
+    const allMatches: string[] = [];
+    
+    // NAJPIERW wyciągnij wartości z atrybutów (title=value, id=value)
+    // Ale TYLKO te które NIE zawierają # (nie są szablonami)
+    const attrPattern = /(\w+)\s*=\s*([^,\]\}\s"'#]+|"[^"#]*"|'[^'#]*')/g;
+    let attrMatch;
+    
+    while ((attrMatch = attrPattern.exec(definition)) !== null) {
+      const value = attrMatch[2].trim().replace(/^["']|["']$/g, '');
+      // Dodaj tylko jeśli nie zawiera # i nie jest już w tablicy
+      if (value && !value.includes('#') && !allMatches.includes(value)) {
+        allMatches.push(value);
+      }
+    }
+    
+    // POTEM dodaj parametry z nawiasów klamrowych
+    const bracePattern = /\{([^}]*)\}/g;
+    let braceMatch;
+    
+    while ((braceMatch = bracePattern.exec(definition)) !== null) {
+      const value = braceMatch[1].trim();
+      // Pomiń wartości zawierające # (to szablony) i już dodane
+      if (value && !value.includes('#') && !allMatches.includes(value)) {
+        allMatches.push(value);
+      }
+    }
+    
+    return allMatches;
   }
 
   /**
    * Wyciąga caption z definicji
    */
   private static extractCaptionFromDefinition(definition: string): string | null {
-    // Standardowy \caption{...}
-    const captionMatch = definition.match(/\\caption\s*\{([^}]*)\}/);
-    if (captionMatch) {
-      return captionMatch[1];
-    }
+    const patterns = [
+      /\\caption\s*\{([^}]*)\}/,           // \caption{...}
+      /caption\s*=\s*"([^"]+)"/,            // caption="..."
+      /caption\s*=\s*'([^']+)'/,            // caption='...'
+      /caption\s*=\s*([^,\]]+)/             // caption=value (bez cudzysłowów)
+    ];
     
-    // Format lstinputlisting: caption=value (bez cudzysłowów)
-    const lstCaptionMatch = definition.match(/caption\s*=\s*([^,\]]+)/);
-    if (lstCaptionMatch) {
-      return lstCaptionMatch[1].trim();
-    }
-    
-    // Format z cudzysłowami: caption="value"
-    const quotedCaptionMatch = definition.match(/caption\s*=\s*"([^"]+)"/);
-    if (quotedCaptionMatch) {
-      return quotedCaptionMatch[1];
+    for (const pattern of patterns) {
+      const match = definition.match(pattern);
+      if (match) return match[1].trim();
     }
     
     return null;
@@ -715,156 +488,70 @@ export class MacroConverter {
    * Wyciąga label/identifier z definicji
    */
   private static extractLabelFromDefinition(definition: string): string | null {
-    // Standardowy \label{prefix:value} - wyciągnij tylko value
-    const labelMatch = definition.match(/\\label\s*\{[^:]*:([^}]*)\}/);
-    if (labelMatch) {
-      return labelMatch[1];
+    const patterns = [
+      /\\label\s*\{([^}]*)\}/,              // \label{...}
+      /label\s*=\s*\{([^}]*)\}/             // label={...}
+    ];
+    
+    for (const pattern of patterns) {
+      const match = definition.match(pattern);
+      if (!match) continue;
+      
+      const label = match[1];
+      // Wyciągnij część po ":" jeśli istnieje (np. rys:identifier → identifier)
+      return label.includes(':') ? label.split(':')[1] : label;
     }
     
-    // Format lstinputlisting: label={prefix:value}
-    const lstLabelMatch = definition.match(/label\s*=\s*\{[^:]*:([^}]*)\}/);
-    if (lstLabelMatch) {
-      return lstLabelMatch[1];
-    }
-    
-    // Fallback - spróbuj wyciągnąć całą część po ":"
-    const fullLabelMatch = definition.match(/\\label\s*\{([^}]*)\}/);
-    if (fullLabelMatch && fullLabelMatch[1].includes(':')) {
-      return fullLabelMatch[1].split(':')[1];
-    }
-    
-    // Fallback dla lstinputlisting - label={value}
-    const lstFullLabelMatch = definition.match(/label\s*=\s*\{([^}]*)\}/);
-    if (lstFullLabelMatch && lstFullLabelMatch[1].includes(':')) {
-      return lstFullLabelMatch[1].split(':')[1];
-    }
-    
-    return fullLabelMatch ? fullLabelMatch[1] : (lstFullLabelMatch ? lstFullLabelMatch[1] : null);
-  }
-
-  /**
-   * Próbuje wyciągnąć parametr o podanej nazwie z definicji
-   */
-  private static extractGenericParameterFromDefinition(definition: string, parameterName: string): string | null {
-    // Można tutaj dodać więcej heurystyk dla różnych typów parametrów
     return null;
-  }
-
-  /**
-   * Wyciąga parametry z rozwiniętej definicji porównując z oryginalną definicją makra (stara metoda)
-   */
-  private static extractParametersFromExpandedDefinition(expandedDefinition: string, originalDefinition: string): string[] {
-    const parameters: string[] = [];
-    
-    // Znajdź wszystkie miejsca gdzie w oryginalnej definicji są parametry #1, #2, etc.
-    const paramMatches = [...originalDefinition.matchAll(/#(\d+)/g)];
-    
-    for (const match of paramMatches) {
-      const paramNumber = parseInt(match[1]);
-      const paramPlaceholder = match[0];
-      
-      // Znajdź kontekst wokół parametru w oryginalnej definicji
-      const beforeParam = originalDefinition.substring(0, match.index!);
-      const afterParam = originalDefinition.substring(match.index! + paramPlaceholder.length);
-      
-      // Znajdź ten sam kontekst w rozwiniętej definicji
-      const beforePattern = this.escapeRegex(beforeParam.slice(-20)); // Ostatnie 20 znaków jako kontekst
-      const afterPattern = this.escapeRegex(afterParam.slice(0, 20)); // Pierwsze 20 znaków jako kontekst
-      
-      const contextPattern = new RegExp(`${beforePattern}(.*?)${afterPattern}`);
-      const contextMatch = expandedDefinition.match(contextPattern);
-      
-      if (contextMatch && contextMatch[1]) {
-        parameters[paramNumber - 1] = contextMatch[1].trim();
-      }
-    }
-    
-    // Usuń puste elementy i zwróć tylko wypełnione parametry
-    return parameters.filter(param => param && param.length > 0);
-  }
-
-  /**
-   * Escapes special regex characters
-   */
-  private static escapeRegex(string: string): string {
-    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
   /**
    * Wyciąga opcjonalny parametr (np. width) z definicji
    */
   private static extractOptionalParameterFromDefinition(definition: string): string | null {
-    // Szukaj width w includegraphics
-    const widthMatch = definition.match(/\\includegraphics\[width=([^\]]*)\]/);
-    if (widthMatch) {
-      return widthMatch[1];
-    }
-    
-    return null;
-  }
+    const includegraphicsMatch = definition.match(/\\includegraphics\[([^\]]+)\]/);
+    if (!includegraphicsMatch) return null;
 
-  /**
-   * Wyciąga parametry z definicji na podstawie sygnatury
-   */
-  private static extractParametersFromDefinition(definition: string, signature: MacroSignatureConfig): string[] {
-    const parameters: string[] = [];
+    const options = includegraphicsMatch[1];
     
-    // Znajdź ścieżkę do pliku (PATH)
-    if (signature.signature.includes('PATH')) {
-      const pathMatch = this.extractPathFromDefinition(definition);
-      if (pathMatch) {
-        parameters.push(pathMatch);
-      }
-    }
+    // NIE wyciągaj jeśli zawiera # (to szablon, nie wartość)
+    if (options.includes('#')) return null;
     
-    // Znajdź caption
-    const captionMatch = definition.match(/\\caption\s*\{([^}]*)\}/);
-    if (captionMatch) {
-      parameters.push(captionMatch[1]);
-    }
+    // Wyciągnij wartość width= lub scale=
+    const keyValueMatch = options.match(/(?:width|scale)=([^,\]]+)/);
+    if (keyValueMatch) return keyValueMatch[1];
     
-    // Znajdź label
-    const labelMatch = definition.match(/\\label\s*\{(?:rys:|fig:|tab:)?([^}]*)\}/);
-    if (labelMatch) {
-      parameters.push(labelMatch[1]);
-    }
+    // Pojedyncza wartość bez klucza (np. \includegraphics[0.8]{...})
+    if (!options.includes('=')) return options.trim();
     
-    // Znajdź inne parametry na podstawie liczby argumentów w sygnaturze
-    const argCount = (signature.signature.match(/\{[^}]*\}/g) || []).length;
-    while (parameters.length < argCount) {
-      parameters.push(`arg${parameters.length + 1}`);
-    }
-    
-    return parameters;
+    // W przeciwnym razie zwróć wszystkie opcje
+    return options;
   }
 
   /**
    * Wyciąga ścieżkę do pliku z definicji
    */
   private static extractPathFromDefinition(definition: string): string | null {
-    // Szukaj ścieżek w includegraphics
-    const includegraphicsMatch = definition.match(/\\includegraphics(?:\[[^\]]*\])?\s*\{([^}]*)\}/);
-    if (includegraphicsMatch) {
-      return includegraphicsMatch[1];
+    // Wzorce dla komend LaTeX z plikami
+    const commandPatterns = [
+      /\\includegraphics(?:\[[^\]]*\])?\s*\{([^}]*)\}/,
+      /\\lstinputlisting(?:\[[^\]]*\])?\s*\{([^}]*)\}/
+    ];
+    
+    for (const pattern of commandPatterns) {
+      const match = definition.match(pattern);
+      if (match) return match[1];
     }
     
-    // Szukaj ścieżek w lstinputlisting
-    const lstinputlistingMatch = definition.match(/\\lstinputlisting(?:\[[^\]]*\])?\s*\{([^}]*)\}/);
-    if (lstinputlistingMatch) {
-      return lstinputlistingMatch[1];
-    }
-    
-    // Szukaj innych wzorców ścieżek
+    // Wzorce dla ścieżek plików
     const pathPatterns = [
-      /\{([^}]*\.(png|jpg|jpeg|pdf|eps|svg|txt|c|cpp|m|py))\}/i,
-      /\{([^}]*\/[^}]*)\}/  // ścieżka z slash
+      /\{([^}]*\.(png|jpg|jpeg|pdf|eps|svg|txt|c|cpp|m|py))\}/i,  // rozszerzenia plików
+      /\{([^}]*\/[^}]*)\}/                                           // ścieżka z /
     ];
     
     for (const pattern of pathPatterns) {
       const match = definition.match(pattern);
-      if (match) {
-        return match[1];
-      }
+      if (match) return match[1];
     }
     
     return null;
@@ -965,7 +652,7 @@ export class MacroConverter {
   /**
    * Wyciąga wartości z użycia makra zgodnie z sygnaturą
    */
-  static extractValuesFromUsage(usage: MacroUsage, signature: string): string[] {
+  static extractValuesFromUsage(usage: MacroUsage, _signature: string): string[] {
     // Uproszczona implementacja - można rozszerzyć
     return usage.parameters;
   }

@@ -92,7 +92,7 @@ export class MacroReferenceCodeLensProvider implements vscode.CodeLensProvider {
     if (document.languageId !== 'latex') return [];
 
     const macros = MacroParser
-      .parseMacrosFromText(document.getText(), document.uri.fsPath)
+      .parseMacrosFromDocument(document)
       .filter(macro => macro.location.file === document.uri.fsPath);
 
     if (macros.length === 0) return [];

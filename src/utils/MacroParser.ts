@@ -20,61 +20,69 @@ export class MacroParser {
   static async findMacrosInFile(filePath: string): Promise<MacroDefinition[]> {
     try {
       const uri = vscode.Uri.file(filePath);
-      const content = await vscode.workspace.fs.readFile(uri);
-      const text = Buffer.from(content).toString('utf-8');
-
-      return this.parseMacrosFromText(text, filePath);
+      const document = await vscode.workspace.openTextDocument(uri);
+      
+      return this.parseMacrosFromDocument(document);
     } catch (error) {
       console.error(`Error parsing macros in file ${filePath}:`, error);
       return [];
     }
   }
 
+  static parseMacrosFromDocument(document: vscode.TextDocument): MacroDefinition[] {
+    const text = document.getText();
+    const filePath = document.uri.fsPath;
+    const macros: MacroDefinition[] = [];
+
+    macros.push(...this.parseCommandPattern(text, filePath, document, 'newcommand'));
+    macros.push(...this.parseCommandPattern(text, filePath, document, 'renewcommand'));
+    macros.push(...this.parseDefCommands(text, filePath, document));
+
+    return macros;
+  }
+
   static parseMacrosFromText(text: string, filePath: string): MacroDefinition[] {
+    // Fallback for when we don't have a document
     const macros: MacroDefinition[] = [];
 
-    macros.push(...this.parseNewCommands(text, filePath));
-    macros.push(...this.parseRenewCommands(text, filePath));
-    macros.push(...this.parseDefCommands(text, filePath));
+    macros.push(...this.parseCommandPatternLegacy(text, filePath, 'newcommand'));
+    macros.push(...this.parseCommandPatternLegacy(text, filePath, 'renewcommand'));
+    macros.push(...this.parseDefCommandsLegacy(text, filePath));
 
     return macros;
   }
 
-  private static parseNewCommands(text: string, filePath: string): MacroDefinition[] {
+  /**
+   * Unified parser for \newcommand and \renewcommand (and their starred variants)
+   */
+  private static parseCommandPattern(
+    text: string, 
+    filePath: string, 
+    document: vscode.TextDocument,
+    commandType: 'newcommand' | 'renewcommand'
+  ): MacroDefinition[] {
     const macros: MacroDefinition[] = [];
-
-    // Pattern dla \newcommand i \newcommand* - bez sprawdzania co jest po {
-    const pattern = /\\newcommand(\*?)\s*\{\s*\\([^}]+)\s*\}(?:\s*\[(\d+)\])?(?:\s*\[([^\]]*)\])?\s*\{/g;
+    const pattern = new RegExp(`\\\\${commandType}(\\*?)\\s*\\{\\s*\\\\([^}]+)\\s*\\}(?:\\s*\\[(\\d+)\\])?(?:\\s*\\[([^\\]]*)\\])?\\s*\\{`, 'g');
     let match;
 
     while ((match = pattern.exec(text)) !== null) {
-      const isStarred = match[1] === '*';
-      const macroName = match[2];
-      const paramCount = parseInt(match[3] || '0');
-      const defaultValue = match[4] || null; // Opcjonalna wartość domyślna
-      const startPos = match.index;
-
-      // Znajdź początek definicji (ostatni nawias otwierający w dopasowaniu)
-      const matchText = match[0];
-      const lastBraceIndex = matchText.lastIndexOf('{');
-      const definitionStart = startPos + lastBraceIndex;
-
-      const definition = this.extractBalancedBraces(text, definitionStart);
-
+      const definition = this.extractBalancedBraces(text, match.index + match[0].lastIndexOf('{'));
+      
       if (definition !== null) {
-        const location = this.getLocationFromPosition(text, startPos);
+        const position = document.positionAt(match.index);
+        const isStarred = match[1] === '*';
 
         macros.push({
-          name: macroName,
+          name: match[2],
           definition: definition.trim(),
-          parameters: paramCount,
+          parameters: parseInt(match[3] || '0'),
           location: {
             file: filePath,
-            line: location.line,
-            column: location.column
+            line: position.line + 1,
+            column: position.character
           },
-          type: isStarred ? 'newcommand*' : 'newcommand',
-          defaultValue
+          type: isStarred ? `${commandType}*` as const : commandType,
+          defaultValue: match[4] || null
         });
       }
     }
@@ -82,41 +90,36 @@ export class MacroParser {
     return macros;
   }
 
-  private static parseRenewCommands(text: string, filePath: string): MacroDefinition[] {
+  /**
+   * Legacy version for parsing without document (backward compatibility)
+   */
+  private static parseCommandPatternLegacy(
+    text: string, 
+    filePath: string,
+    commandType: 'newcommand' | 'renewcommand'
+  ): MacroDefinition[] {
     const macros: MacroDefinition[] = [];
-
-    // Pattern dla \renewcommand i \renewcommand*
-    const pattern = /\\renewcommand(\*?)\s*\{\s*\\([^}]+)\s*\}(?:\s*\[(\d+)\])?(?:\s*\[([^\]]*)\])?\s*\{/g;
+    const pattern = new RegExp(`\\\\${commandType}(\\*?)\\s*\\{\\s*\\\\([^}]+)\\s*\\}(?:\\s*\\[(\\d+)\\])?(?:\\s*\\[([^\\]]*)\\])?\\s*\\{`, 'g');
     let match;
 
     while ((match = pattern.exec(text)) !== null) {
-      const isStarred = match[1] === '*';
-      const macroName = match[2];
-      const paramCount = parseInt(match[3] || '0');
-      const defaultValue = match[4] || null;
-      const startPos = match.index;
-
-      // Znajdź początek definicji
-      const matchText = match[0];
-      const lastBraceIndex = matchText.lastIndexOf('{');
-      const definitionStart = startPos + lastBraceIndex;
-
-      const definition = this.extractBalancedBraces(text, definitionStart);
-
+      const definition = this.extractBalancedBraces(text, match.index + match[0].lastIndexOf('{'));
+      
       if (definition !== null) {
-        const location = this.getLocationFromPosition(text, startPos);
+        const location = this.getLocationFromPosition(text, match.index);
+        const isStarred = match[1] === '*';
 
         macros.push({
-          name: macroName,
+          name: match[2],
           definition: definition.trim(),
-          parameters: paramCount,
+          parameters: parseInt(match[3] || '0'),
           location: {
             file: filePath,
             line: location.line,
             column: location.column
           },
-          type: isStarred ? 'renewcommand*' : 'renewcommand',
-          defaultValue
+          type: isStarred ? `${commandType}*` as const : commandType,
+          defaultValue: match[4] || null
         });
       }
     }
@@ -124,33 +127,49 @@ export class MacroParser {
     return macros;
   }
 
-  private static parseDefCommands(text: string, filePath: string): MacroDefinition[] {
+  private static parseDefCommands(text: string, filePath: string, document: vscode.TextDocument): MacroDefinition[] {
     const macros: MacroDefinition[] = [];
-
-    // Pattern dla \def - obsługuje parametry w stylu #1#2#3
     const pattern = /\\def\s*\\([^{#\s]+)([^{]*?)\s*\{/g;
     let match;
 
     while ((match = pattern.exec(text)) !== null) {
-      const macroName = match[1];
-      const params = match[2];
-      const startPos = match.index;
-
-      // Policz parametry na podstawie #1, #2, etc.
-      const paramCount = this.countDefParameters(match[0] + ' dummy}'); // Dodaj dummy aby regex działał
-
-      // Znajdź początek definicji
-      const matchText = match[0];
-      const lastBraceIndex = matchText.lastIndexOf('{');
-      const definitionStart = startPos + lastBraceIndex;
-
-      const definition = this.extractBalancedBraces(text, definitionStart);
+      const definition = this.extractBalancedBraces(text, match.index + match[0].lastIndexOf('{'));
 
       if (definition !== null) {
-        const location = this.getLocationFromPosition(text, startPos);
+        const position = document.positionAt(match.index);
+        const paramCount = this.countDefParameters(match[0] + ' dummy}');
 
         macros.push({
-          name: macroName,
+          name: match[1],
+          definition: definition.trim(),
+          parameters: paramCount,
+          location: {
+            file: filePath,
+            line: position.line + 1,
+            column: position.character
+          },
+          type: 'def'
+        });
+      }
+    }
+
+    return macros;
+  }
+
+  private static parseDefCommandsLegacy(text: string, filePath: string): MacroDefinition[] {
+    const macros: MacroDefinition[] = [];
+    const pattern = /\\def\s*\\([^{#\s]+)([^{]*?)\s*\{/g;
+    let match;
+
+    while ((match = pattern.exec(text)) !== null) {
+      const definition = this.extractBalancedBraces(text, match.index + match[0].lastIndexOf('{'));
+
+      if (definition !== null) {
+        const location = this.getLocationFromPosition(text, match.index);
+        const paramCount = this.countDefParameters(match[0] + ' dummy}');
+
+        macros.push({
+          name: match[1],
           definition: definition.trim(),
           parameters: paramCount,
           location: {
@@ -218,21 +237,21 @@ export class MacroParser {
 
   static async findAllMacrosInProject(mainFile: string): Promise<MacroDefinition[]> {
     const allMacros: MacroDefinition[] = [];
-    const processedFiles = new Set<string>();
-
-    // Find all .tex files in the project
     const baseDir = path.dirname(mainFile);
+    
+    // Find all .tex files in the project using glob pattern
     const texFiles = await vscode.workspace.findFiles(
-      new vscode.RelativePattern(baseDir, '**/*.tex')
+      new vscode.RelativePattern(baseDir, '**/*.tex'),
+      '**/node_modules/**' // exclude node_modules
     );
 
-    // Process each file
-    for (const uri of texFiles) {
-      if (!processedFiles.has(uri.fsPath)) {
-        processedFiles.add(uri.fsPath);
-        const macros = await this.findMacrosInFile(uri.fsPath);
-        allMacros.push(...macros);
-      }
+    // Process files in parallel for better performance
+    const macroPromises = texFiles.map(uri => this.findMacrosInFile(uri.fsPath));
+    const results = await Promise.all(macroPromises);
+    
+    // Flatten results
+    for (const macros of results) {
+      allMacros.push(...macros);
     }
 
     return allMacros;
@@ -242,11 +261,12 @@ export class MacroParser {
   static async debugMacrosParsing(filePath: string): Promise<void> {
     try {
       const uri = vscode.Uri.file(filePath);
-      const content = await vscode.workspace.fs.readFile(uri);
-      const text = Buffer.from(content).toString('utf-8');
+      const document = await vscode.workspace.openTextDocument(uri);
+      const text = document.getText();
 
       console.log('=== MACRO PARSING DEBUG ===');
       console.log('File:', filePath);
+      console.log('Lines:', document.lineCount);
       console.log('Content length:', text.length);
       console.log('Content preview:', text.substring(0, 200) + '...');
 
@@ -255,21 +275,23 @@ export class MacroParser {
       console.log('\n=== Testing newcommand pattern ===');
       let match;
       newcommandPattern.lastIndex = 0;
+      
       while ((match = newcommandPattern.exec(text)) !== null) {
+        const position = document.positionAt(match.index);
+        const matchText = match[0];
+        const lastBraceIndex = matchText.lastIndexOf('{');
+        const definitionStart = match.index + lastBraceIndex;
+        const definition = this.extractBalancedBraces(text, definitionStart);
+        
         console.log('Match found:');
         console.log('  Full match:', JSON.stringify(match[0]));
         console.log('  Star:', match[1]);
         console.log('  Name:', match[2]);
         console.log('  Params:', match[3]);
         console.log('  Default:', match[4]);
-        console.log('  Position:', match.index);
-
-        // Test ekstraktowania definicji
-        const matchText = match[0];
-        const lastBraceIndex = matchText.lastIndexOf('{');
-        const definitionStart = match.index + lastBraceIndex;
-        const definition = this.extractBalancedBraces(text, definitionStart);
+        console.log('  Position:', `Line ${position.line + 1}, Col ${position.character}`);
         console.log('  Definition extracted:', definition ? 'YES' : 'NO');
+        
         if (definition) {
           console.log('  Definition length:', definition.length);
           console.log('  Definition preview:', definition.substring(0, 100) + (definition.length > 100 ? '...' : ''));
@@ -277,8 +299,9 @@ export class MacroParser {
       }
 
       console.log('\n=== FINAL PARSED MACROS ===');
-      const macros = await this.findMacrosInFile(filePath);
+      const macros = this.parseMacrosFromDocument(document);
       console.log('Total macros found:', macros.length);
+      
       macros.forEach((macro, index) => {
         console.log(`\n${index + 1}. ${macro.type}: \\${macro.name} [${macro.parameters} params]`);
         console.log(`   Location: line ${macro.location.line}, col ${macro.location.column}`);

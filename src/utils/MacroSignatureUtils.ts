@@ -160,7 +160,7 @@ export class MacroSignatureUtils {
   /**
    * Generuje przykład użycia makra
    */
-  static generateUsageExample(macro: MacroDefinition, signature: string): string {
+  static generateUsageExample(_macro: MacroDefinition, signature: string): string {
     const pathExample = 'images/figure1.png';
     let example = signature.replace('PATH', pathExample);
     

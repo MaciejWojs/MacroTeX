@@ -184,7 +184,7 @@ export class MacroIndex {
 
   private updateDocument(document: vscode.TextDocument): void {
     if (document.languageId !== 'latex') return;
-    const macros = MacroParser.parseMacrosFromText(document.getText(), document.uri.fsPath);
+    const macros = MacroParser.parseMacrosFromDocument(document);
     this.liveMacrosByFile.set(document.uri.fsPath, macros);
     this.referenceCache.clear();
     this.rebuildIndex();
