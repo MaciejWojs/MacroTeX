@@ -13,6 +13,7 @@ import {
   MacroReferenceCodeLensProvider,
   MacroNameCompletionProvider
 } from './providers/MacroNavigationProviders';
+import MacroSignatureHelpProvider from './providers/MacroSignatureHelpProvider';
 import lescape from 'escape-latex';
 /**
  * Searches the current workspace for all .tex files and returns a list of file paths that are likely
@@ -338,6 +339,11 @@ export const activate = async (context: vscode.ExtensionContext) => {
     { language: 'latex' },
     new MacroNameCompletionProvider(macroIndex),
     '\\'
+  );
+  const signatureHelpDisposable = vscode.languages.registerSignatureHelpProvider(
+    { language: 'latex' },
+    new MacroSignatureHelpProvider(),
+    '{', '[', ','
   );
   const showMacroReferencesCommand = vscode.commands.registerCommand(
     'marcotex.showMacroReferences',
@@ -991,6 +997,7 @@ export const activate = async (context: vscode.ExtensionContext) => {
   vscode.commands.registerCommand("marcotex.insertCsvAsTable", csvAsTableCommand);
   context.subscriptions.push(onDidDeleteFiles, onDidRenameFiles, registerHoverProvider, registerCompletionItemProvider);
   context.subscriptions.push(definitionProviderDisposable, implementationProviderDisposable, referenceProviderDisposable, codeLensProviderDisposable, macroNameCompletionDisposable, showMacroReferencesCommand);
+  context.subscriptions.push(signatureHelpDisposable);
 };
 
 export const deactivate = () => { }
