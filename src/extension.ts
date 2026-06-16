@@ -510,7 +510,7 @@ export const activate = async (context: vscode.ExtensionContext) => {
     });
 
 
-  vscode.commands.registerCommand("marcotex.insetToActiveDocument", async (_contextSelection: vscode.Uri, uris: vscode.Uri[]) => {
+  vscode.commands.registerCommand("marcotex.insertToActiveDocument", async (_contextSelection: vscode.Uri, uris: vscode.Uri[]) => {
     const mainLaTeXFile = await findClosestMainLaTeXFile();
     const config = vscode.workspace.getConfiguration('latexMacros');
     const macrosList = getConfiguredMacros();

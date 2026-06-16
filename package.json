@@ -82,7 +82,7 @@
     },
     "commands": [
       {
-        "command": "marcotex.insetToActiveDocument",
+        "command": "marcotex.insertToActiveDocument",
         "title": "Insert in active document"
       },
       {
@@ -109,7 +109,7 @@
     "menus": {
       "commandPalette": [
         {
-          "command": "marcotex.insetToActiveDocument",
+          "command": "marcotex.insertToActiveDocument",
           "when": "false"
         },
         {
@@ -139,7 +139,7 @@
       ],
       "explorer/context": [
         {
-          "command": "marcotex.insetToActiveDocument",
+          "command": "marcotex.insertToActiveDocument",
           "when": "resourceFilename",
           "group": "navigation"
         },
